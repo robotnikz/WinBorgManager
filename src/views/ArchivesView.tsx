@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { Archive, Repository } from '../types';
 import Button from '../components/Button';
-import { Database, Clock, HardDrive, Search, Filter, Calendar } from 'lucide-react';
+import { Database, Clock, HardDrive, Search, Filter, Calendar, RefreshCw } from 'lucide-react';
 
 interface ArchivesViewProps {
   archives: Archive[];
   repos: Repository[];
   onMount: (repo: Repository, archiveName: string) => void;
+  onRefresh: () => void;
 }
 
-const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount }) => {
+const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, onRefresh }) => {
   const [search, setSearch] = useState('');
   
   // Basic filtering
@@ -17,9 +18,7 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount })
     a.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Helper to find the active connected repo (assuming archives list belongs to it)
-  // In a real multi-repo app, archives would be nested under repos, but based on current App.tsx structure, 
-  // 'archives' state is populated by the last 'connected' action.
+  // Helper to find the active connected repo
   const activeRepo = repos.find(r => r.status === 'connected');
 
   return (
@@ -44,6 +43,9 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount })
                   onChange={(e) => setSearch(e.target.value)}
                 />
             </div>
+            <Button variant="secondary" onClick={onRefresh} title="Refresh Archives List" disabled={!activeRepo}>
+                <RefreshCw className="w-4 h-4" />
+            </Button>
             <Button variant="secondary">
                 <Filter className="w-4 h-4 mr-2" /> Filter
             </Button>
@@ -65,8 +67,14 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount })
                 {filteredArchives.length === 0 ? (
                     <tr>
                         <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
-                            <Database className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                            {activeRepo ? "No archives found matching your search." : "Connect to a repository to see archives."}
+                            <Database className="w-8 h-8 mx-auto mb-3 opacity-50" />
+                            <p className="mb-4">{activeRepo ? "No archives found or list is empty." : "Connect to a repository to see archives."}</p>
+                            {activeRepo && (
+                                <Button variant="secondary" onClick={onRefresh}>
+                                    <RefreshCw className="w-4 h-4 mr-2" />
+                                    Load Archives for {activeRepo.name}
+                                </Button>
+                            )}
                         </td>
                     </tr>
                 ) : (

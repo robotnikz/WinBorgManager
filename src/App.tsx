@@ -16,7 +16,7 @@ import { borgService } from './services/borgService';
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
   
-  // LOGIC FIX: Persistence
+  // LOGIC FIX: Persistence for Repos
   const [repos, setRepos] = useState<Repository[]>(() => {
     const isInitialized = localStorage.getItem('winborg_initialized');
     const savedRepos = localStorage.getItem('winborg_repos');
@@ -29,14 +29,24 @@ const App: React.FC = () => {
     }
   });
 
+  // LOGIC FIX: Persistence for Archives
+  const [archives, setArchives] = useState<Archive[]>(() => {
+    const savedArchives = localStorage.getItem('winborg_archives');
+    return savedArchives ? JSON.parse(savedArchives) : [];
+  });
+
   const [mounts, setMounts] = useState<MountPoint[]>([]);
-  const [archives, setArchives] = useState<Archive[]>([]);
   const [preselectedRepoId, setPreselectedRepoId] = useState<string | null>(null);
   
   // Persist Repos when they change
   useEffect(() => {
     localStorage.setItem('winborg_repos', JSON.stringify(repos));
   }, [repos]);
+
+  // Persist Archives when they change
+  useEffect(() => {
+    localStorage.setItem('winborg_archives', JSON.stringify(archives));
+  }, [archives]);
 
   // NEW: Listen for unexpected mount crashes to keep UI in sync
   useEffect(() => {
@@ -240,6 +250,16 @@ const App: React.FC = () => {
   };
 
   /**
+   * Refresh the archives for the currently connected repo
+   */
+  const handleRefreshArchives = () => {
+      const activeRepo = repos.find(r => r.status === 'connected');
+      if (activeRepo) {
+          handleConnect(activeRepo);
+      }
+  };
+
+  /**
    * Run Integrity Check in BACKGROUND (Non-Blocking) with Progress
    */
   const handleCheckIntegrity = async (repo: Repository) => {
@@ -302,9 +322,6 @@ const App: React.FC = () => {
       if (repo.status !== 'connected') {
           handleConnect(repo);
       }
-      // Note: We don't have a way to preselect the archive name in MountsView currently via props only via state
-      // This is a minor limitation, the user will have to pick the archive from the dropdown in MountsView
-      // To fix this, MountsView would need a 'preselectedArchive' prop.
   };
 
   const handleAddRepo = (repoData: { name: string; url: string; encryption: 'repokey' | 'keyfile' | 'none', passphrase?: string, trustHost?: boolean }) => {
@@ -383,6 +400,7 @@ const App: React.FC = () => {
                 archives={archives} 
                 repos={repos} 
                 onMount={handleArchiveMount}
+                onRefresh={handleRefreshArchives}
             />
         );
       case View.SETTINGS:
