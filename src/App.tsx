@@ -155,9 +155,19 @@ const App: React.FC = () => {
     // Log Start
     addActivity('Mount Requested', `Mounting ${archiveName} to ${path}`, 'info');
 
-    const result = await borgService.mount(repo.url, archiveName, path, (log) => {
-         setTerminalLogs(prev => [...prev, log.trim()]);
-    });
+    // IMPORTANT: Pass the repository specific settings (passphrase, trustHost)
+    const result = await borgService.mount(
+        repo.url, 
+        archiveName, 
+        path, 
+        (log) => {
+            setTerminalLogs(prev => [...prev, log.trim()]);
+        }, 
+        {
+            passphrase: repo.passphrase,
+            disableHostCheck: repo.trustHost
+        }
+    );
 
     setIsProcessing(false);
 

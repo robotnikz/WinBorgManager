@@ -46,8 +46,8 @@ const getEnvVars = (config: any, overrides?: { passphrase?: string, disableHostC
         // CRITICAL FIX: Do NOT use '/u' for BORG_PASSPHRASE. 
         // '/u' tells WSLENV to translate a path (e.g. C:\... -> /mnt/c/...). 
         // This mangles passwords containing slashes or backslashes.
-        // We just want to pass the value as is.
-        env.WSLENV = 'BORG_PASSPHRASE:BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK:BORG_RELOCATED_REPO_ACCESS_IS_OK:BORG_RSH/u';
+        // Also removed '/u' from BORG_RSH because it is a command string, not a single path.
+        env.WSLENV = 'BORG_PASSPHRASE:BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK:BORG_RELOCATED_REPO_ACCESS_IS_OK:BORG_RSH';
     }
     
     return env;
@@ -276,7 +276,8 @@ export const borgService = {
     repoUrl: string, 
     archiveName: string, 
     mountPoint: string,
-    onLog: (text: string) => void
+    onLog: (text: string) => void,
+    overrides?: { passphrase?: string, disableHostCheck?: boolean }
   ): Promise<{ success: boolean; mountId?: string; error?: string }> => {
     const mountId = `mount-${Date.now()}`;
     const config = getBorgConfig();
@@ -300,7 +301,7 @@ export const borgService = {
         mountId, 
         useWsl: config.useWsl,
         executablePath: config.path,
-        envVars: getEnvVars(config) 
+        envVars: getEnvVars(config, overrides) // Pass overrides (host checks/passphrase)
     });
     
     if (result.success) {
