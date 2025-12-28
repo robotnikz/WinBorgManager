@@ -27,9 +27,9 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
      const wslEnabled = localStorage.getItem('winborg_use_wsl') === 'true';
      setUseWsl(wslEnabled);
      
-     // Use a unique path in /mnt/wsl which is robust and shareable
-     const randomId = Math.floor(Math.random() * 9000) + 1000;
-     setMountPath(wslEnabled ? `/mnt/wsl/winborg-${randomId}` : 'Z:');
+     // USER REQUEST: Always use fixed path /mnt/winborg
+     // The backend will automatically run 'mkdir -p' for this path before mounting.
+     setMountPath(wslEnabled ? `/mnt/winborg` : 'Z:');
 
      // Handle Preselection from other views
      if (preselectedRepoId) {
@@ -123,7 +123,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
                       className="w-full p-2 bg-white border border-gray-200 rounded-md text-sm text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                       value={mountPath}
                       onChange={(e) => setMountPath(e.target.value)}
-                      placeholder="/mnt/wsl/mybackup"
+                      placeholder="/mnt/winborg"
                    />
                ) : (
                    <select 
@@ -134,7 +134,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
                      {drives.map(l => <option key={l} value={l}>{l}</option>)}
                    </select>
                )}
-               {useWsl && <p className="text-[10px] text-slate-400 mt-1">Directory inside your WSL distro</p>}
+               {useWsl && <p className="text-[10px] text-slate-400 mt-1">Directory inside your WSL distro (auto-created)</p>}
              </div>
            </div>
 
