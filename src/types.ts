@@ -20,6 +20,10 @@ export interface Repository {
   // Security / Config Persistence
   passphrase?: string;
   trustHost?: boolean;
+  
+  // Integrity Check State
+  checkStatus?: 'idle' | 'running' | 'ok' | 'error';
+  lastCheckTime?: string;
 }
 
 export interface Archive {

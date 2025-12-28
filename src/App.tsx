@@ -238,15 +238,30 @@ const App: React.FC = () => {
     );
   };
 
-  const handleCheckIntegrity = (repo: Repository) => {
-      runCommand(
-          `Verifying Integrity: ${repo.name}`,
-          ['check', '--info', '--progress', repo.url],
-          (output) => {
-              // We don't parse output here, the user sees the terminal
-          },
+  /**
+   * Run Integrity Check in BACKGROUND (Non-Blocking)
+   */
+  const handleCheckIntegrity = async (repo: Repository) => {
+      // 1. Set Status to Running
+      setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, checkStatus: 'running' } : r));
+      
+      console.log(`Starting background check for ${repo.name}...`);
+
+      // 2. Run command without modal logic
+      // Note: We ignore specific logs for now, we just care about success code
+      const success = await borgService.runCommand(
+          ['check', repo.url], // removed --info --progress for lighter output
+          (log) => { /* Optional: capture log to file or state if needed later */ },
           { passphrase: repo.passphrase, disableHostCheck: repo.trustHost }
       );
+
+      // 3. Update Status
+      const timestamp = new Date().toLocaleString();
+      setRepos(prev => prev.map(r => r.id === repo.id ? { 
+          ...r, 
+          checkStatus: success ? 'ok' : 'error',
+          lastCheckTime: timestamp 
+      } : r));
   };
 
   /**
@@ -274,7 +289,9 @@ const App: React.FC = () => {
        size: 'Unknown',
        fileCount: 0,
        passphrase: repoData.passphrase,
-       trustHost: repoData.trustHost
+       trustHost: repoData.trustHost,
+       checkStatus: 'idle',
+       lastCheckTime: 'Never'
     };
     setRepos(prev => [...prev, newRepo]);
     

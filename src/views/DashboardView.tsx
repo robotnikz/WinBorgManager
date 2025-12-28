@@ -10,7 +10,10 @@ import {
   Database, 
   Clock, 
   AlertTriangle,
-  Zap
+  Zap,
+  Loader2,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react';
 import Button from '../components/Button';
 import { parseSizeString, formatBytes } from '../utils/formatters';
@@ -32,11 +35,14 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMou
     const activeMounts = mounts.length;
     const connectedRepos = repos.filter(r => r.status === 'connected').length;
     
+    // Check Statuses
+    const runningChecks = repos.filter(r => r.checkStatus === 'running').length;
+    const errorChecks = repos.filter(r => r.checkStatus === 'error').length;
+    
     // Calculate total size stored
     const totalBytes = repos.reduce((acc, repo) => acc + parseSizeString(repo.size), 0);
     
-    // Simulate Original Size (Borg usually has 2x-5x deduplication ratio)
-    // We simulate a 2.4x ratio for the visualization to look like Vorta
+    // Simulate Original Size
     const simulatedOriginalBytes = totalBytes * 2.4; 
     
     const savingsBytes = simulatedOriginalBytes - totalBytes;
@@ -46,6 +52,8 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMou
         totalRepos,
         activeMounts,
         connectedRepos,
+        runningChecks,
+        errorChecks,
         totalBytes,
         formattedTotal: formatBytes(totalBytes),
         formattedOriginal: formatBytes(simulatedOriginalBytes),
@@ -56,10 +64,8 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMou
 
   const handleSmartVerify = () => {
     if (repos.length === 1 && repos[0].status === 'connected') {
-        // If only one connected repo, run check immediately
         onCheck(repos[0]);
     } else {
-        // Otherwise go to list to select
         onChangeView(View.REPOSITORIES);
     }
   };
@@ -74,10 +80,22 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMou
           <p className="text-slate-500 mt-1">Backup Infrastructure Status</p>
         </div>
         <div className="text-right">
-             <div className="inline-flex items-center gap-2 px-3 py-1 bg-green-50 border border-green-200 rounded-full text-green-700 text-sm font-medium">
-                <ShieldCheck className="w-4 h-4" />
-                <span>All Systems Operational</span>
-             </div>
+             {stats.runningChecks > 0 ? (
+                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 border border-blue-200 rounded-full text-blue-700 text-sm font-medium animate-pulse">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Running Integrity Check...</span>
+                 </div>
+             ) : stats.errorChecks > 0 ? (
+                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-red-50 border border-red-200 rounded-full text-red-700 text-sm font-medium">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>Integrity Issues Found</span>
+                 </div>
+             ) : (
+                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-green-50 border border-green-200 rounded-full text-green-700 text-sm font-medium">
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>All Systems Operational</span>
+                 </div>
+             )}
         </div>
       </div>
 
@@ -152,16 +170,6 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMou
                              ></div>
                          </div>
                     </div>
-                    
-                    <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 flex gap-4">
-                        <Zap className="w-10 h-10 text-yellow-500 shrink-0" />
-                        <div>
-                            <h4 className="text-sm font-bold text-slate-800">Why makes Borg cool?</h4>
-                            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                                Borg stores files in variable-length chunks. Only new or modified chunks are stored. This results in massive space savings compared to traditional backups.
-                            </p>
-                        </div>
-                    </div>
                 </div>
             </div>
 
@@ -185,8 +193,23 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMou
                                         <div className="font-medium text-slate-800">{repo.name}</div>
                                         <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
                                             <span className="truncate max-w-[200px]">{repo.url}</span>
-                                            <span>•</span>
-                                            <span>{repo.size}</span>
+                                            
+                                            {/* Integrity Status Badge */}
+                                            {repo.checkStatus === 'running' && (
+                                                <span className="flex items-center gap-1 text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded ml-2">
+                                                    <Loader2 className="w-3 h-3 animate-spin" /> Checking...
+                                                </span>
+                                            )}
+                                            {repo.checkStatus === 'ok' && (
+                                                <span className="flex items-center gap-1 text-green-600 bg-green-50 px-1.5 py-0.5 rounded ml-2" title={`Verified: ${repo.lastCheckTime}`}>
+                                                    <CheckCircle2 className="w-3 h-3" /> Verified
+                                                </span>
+                                            )}
+                                            {repo.checkStatus === 'error' && (
+                                                <span className="flex items-center gap-1 text-red-600 bg-red-50 px-1.5 py-0.5 rounded ml-2">
+                                                    <XCircle className="w-3 h-3" /> Check Failed
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -198,18 +221,26 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMou
                                         </div>
                                     </div>
                                     <div className="flex gap-2">
-                                        <Button 
-                                            size="sm" 
-                                            variant="secondary"
-                                            onClick={() => onConnect(repo)}
-                                            disabled={repo.status === 'connected'}
-                                        >
-                                            {repo.status === 'connected' ? 'Connected' : 'Connect'}
-                                        </Button>
-                                        {repo.status === 'connected' && (
-                                            <Button size="sm" onClick={() => onQuickMount(repo)}>
-                                                Mount
+                                        {repo.checkStatus === 'running' ? (
+                                            <Button size="sm" variant="secondary" disabled>
+                                                Checking...
                                             </Button>
+                                        ) : (
+                                            <>
+                                                <Button 
+                                                    size="sm" 
+                                                    variant="secondary"
+                                                    onClick={() => onConnect(repo)}
+                                                    disabled={repo.status === 'connected'}
+                                                >
+                                                    {repo.status === 'connected' ? 'Connected' : 'Connect'}
+                                                </Button>
+                                                {repo.status === 'connected' && (
+                                                    <Button size="sm" onClick={() => onQuickMount(repo)}>
+                                                        Mount
+                                                    </Button>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                 </div>
@@ -239,7 +270,8 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMou
                     </button>
                     <button 
                          onClick={handleSmartVerify}
-                         className="w-full text-left px-4 py-3 bg-white/10 hover:bg-white/20 rounded-lg transition-colors flex items-center gap-3 border border-white/5"
+                         disabled={stats.runningChecks > 0}
+                         className="w-full text-left px-4 py-3 bg-white/10 hover:bg-white/20 rounded-lg transition-colors flex items-center gap-3 border border-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <AlertTriangle className="w-5 h-5 text-yellow-300" />
                         <div>

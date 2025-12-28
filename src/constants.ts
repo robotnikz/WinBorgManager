@@ -1,3 +1,4 @@
+
 import { Repository, Archive, MountPoint } from './types';
 
 export const MOCK_REPOS: Repository[] = [
@@ -9,7 +10,9 @@ export const MOCK_REPOS: Repository[] = [
     encryption: 'repokey',
     status: 'connected',
     size: '1.2 TB',
-    fileCount: 450023
+    fileCount: 450023,
+    checkStatus: 'ok',
+    lastCheckTime: 'Yesterday'
   },
   {
     id: '2',
@@ -19,7 +22,9 @@ export const MOCK_REPOS: Repository[] = [
     encryption: 'none',
     status: 'disconnected',
     size: '450 GB',
-    fileCount: 12000
+    fileCount: 12000,
+    checkStatus: 'idle',
+    lastCheckTime: 'Never'
   }
 ];
 
