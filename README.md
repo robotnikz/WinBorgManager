@@ -34,37 +34,20 @@ WinBorg relies on a lightweight Linux installation running in the background to 
     ```
 4.  **Restart your computer** when prompted.
 5.  After restarting, a terminal window will open automatically to finish installing **Ubuntu**.
-6.  When asked, create a **username** and **password** for your Linux system (remember this password, you will need it for `sudo` commands).
+6.  When asked, create a **username** and **password** for your Linux system (remember this password).
 
-### Phase 2: Install Borg & Dependencies
+### Phase 2: Install Borg Dependencies
 
 Now we need to install the backup software inside the Linux system.
 
 1.  Open the **Ubuntu** app (or Terminal) from your Start Menu.
-2.  Update your package lists by running:
+2.  Update your package lists and install Borg + FUSE:
     ```bash
-    sudo apt update
+    sudo apt update && sudo apt install borgbackup fuse3 libfuse2 python3-llfuse python3-pyfuse3 -y
     ```
-3.  Install BorgBackup and the FUSE file system (required for mounting):
-    ```bash
-    sudo apt install borgbackup fuse3 libfuse2 python3-llfuse python3-pyfuse3 -y
-    ```
+    *Note: WinBorg will handle the permission configuration (user_allow_other) automatically for you.*
 
-### Phase 3: Configure Permissions (Crucial!)
-
-By default, WSL prevents Windows from accessing drives mounted inside Linux. We need to allow this so WinBorg can open your backups in Explorer.
-
-1.  In your **Ubuntu** terminal, run this command to edit the FUSE configuration:
-    ```bash
-    echo "user_allow_other" | sudo tee -a /etc/fuse.conf
-    ```
-2.  Fix the permissions for the FUSE device:
-    ```bash
-    sudo chmod 666 /dev/fuse
-    ```
-    *Note: You only need to do this once.*
-
-### Phase 4: Install WinBorg Manager
+### Phase 3: Install WinBorg Manager
 
 1.  Download the latest installer (`.exe`) from the [Releases Page](#).
 2.  Run the installer.
@@ -120,8 +103,11 @@ A log of everything WinBorg does.
 *   In WinBorg, when adding a repo, verify "Trust Unknown SSH Host" is checked if connecting for the first time.
 
 **"Mount Failed: FUSE missing"**
-*   This means Phase 3 of the installation was skipped.
-*   Open the Ubuntu terminal and run: `sudo chmod 666 /dev/fuse`.
+*   WinBorg tries to fix permissions automatically. If it fails, open Ubuntu and run:
+    ```bash
+    echo "user_allow_other" | sudo tee -a /etc/fuse.conf
+    sudo chmod 666 /dev/fuse
+    ```
 
 **App says "Repo Locked"**
 *   This happens if a previous backup was interrupted (power loss, crash).
