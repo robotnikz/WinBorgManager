@@ -27,12 +27,11 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
      const wslEnabled = localStorage.getItem('winborg_use_wsl') === 'true';
      setUseWsl(wslEnabled);
      
-     // FIX FOR ERROR 0x01021997:
-     // If in WSL, we MUST NOT mount to a Windows Drive (like Z:).
-     // We must mount to a Linux path (e.g. /tmp/winborg_xxx).
+     // USER REQUEST: Immer in /mnt/wsl/winborg gemountet.
      if (wslEnabled) {
-         const randomId = Math.random().toString(36).substring(2, 6);
-         setMountPath(`/tmp/winborg_${randomId}`);
+         // We append the archive name to keep mounts separate but inside the requested folder
+         const archivePart = selectedArchive ? selectedArchive : 'archive';
+         setMountPath(`/mnt/wsl/winborg/${archivePart}`);
      } else {
          setMountPath('Z:');
      }
@@ -51,6 +50,14 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
      }
   }, [repos, archives, selectedRepo, selectedArchive, preselectedRepoId]);
 
+  // Update path when archive changes (if in WSL mode)
+  useEffect(() => {
+      const wslEnabled = localStorage.getItem('winborg_use_wsl') === 'true';
+      if (wslEnabled && selectedArchive) {
+          setMountPath(`/mnt/wsl/winborg/${selectedArchive}`);
+      }
+  }, [selectedArchive]);
+
   const handleMount = () => {
     onMount(selectedRepo, selectedArchive, mountPath);
     setIsCreating(false);
@@ -59,12 +66,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
   const handleOpenFolder = (path: string) => {
     try {
         const { ipcRenderer } = (window as any).require('electron');
-        let explorerPath = path;
-        if (path.startsWith('/')) {
-             const relativePath = path.replace(/\//g, '\\');
-             explorerPath = `\\\\wsl$\\Ubuntu${relativePath}`;
-        }
-        ipcRenderer.send('open-path', explorerPath);
+        ipcRenderer.send('open-path', path);
     } catch(e) {
         alert(`Path: ${path}`);
     }
@@ -131,16 +133,9 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
                           className="w-full p-2 bg-white border border-gray-200 rounded-md text-sm text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                           value={mountPath}
                           onChange={(e) => setMountPath(e.target.value)}
-                          placeholder="/tmp/winborg_..."
+                          placeholder="/mnt/wsl/winborg/..."
                           readOnly
                        />
-                       <button 
-                         className="p-2 text-slate-400 hover:text-slate-600" 
-                         onClick={() => setMountPath(`/tmp/winborg_${Math.random().toString(36).substring(2, 6)}`)}
-                         title="Generate new path"
-                       >
-                           <Loader2 className="w-4 h-4" />
-                       </button>
                    </div>
                ) : (
                    <select 
@@ -151,7 +146,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
                      {drives.map(l => <option key={l} value={l}>{l}</option>)}
                    </select>
                )}
-               {useWsl && <p className="text-[10px] text-slate-400 mt-1">Using Linux temp folder to avoid Windows filesystem conflicts.</p>}
+               {useWsl && <p className="text-[10px] text-slate-400 mt-1">Mounted in /mnt/wsl/winborg for Windows access.</p>}
              </div>
            </div>
 

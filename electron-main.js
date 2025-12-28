@@ -40,8 +40,6 @@ function createWindow() {
     // Development: Load from Vite Dev Server
     console.log('Running in Development Mode');
     mainWindow.loadURL('http://localhost:5173');
-    // Open DevTools automatically in dev
-    // mainWindow.webContents.openDevTools(); 
   } else {
     // Production: Load from built files
     console.log('Running in Production Mode');
@@ -82,9 +80,42 @@ ipcMain.on('window-close', () => {
 });
 
 ipcMain.on('open-path', (event, pathString) => {
-    shell.openPath(pathString).then((error) => {
-        if (error) console.error('Failed to open path:', error);
-    });
+    console.log("Opening Path:", pathString);
+    
+    // LINUX PATH HANDLING (WSL)
+    if (pathString.startsWith('/') || pathString.startsWith('\\\\wsl')) {
+        // If it looks like a Linux path OR a UNC path to WSL
+        
+        // METHOD 1: Use `wsl --exec explorer.exe <path>`
+        // This is robust because we execute explorer from WITHIN linux context, so it handles the path translation.
+        // If path is \\wsl$\..., we might need to be careful, but /mnt/wsl/... definitely works here.
+        
+        let linuxPath = pathString;
+        
+        // If it was converted to UNC by frontend, convert back to linux for wsl --exec
+        // e.g. \\wsl$\Ubuntu\mnt\wsl\winborg -> /mnt/wsl/winborg
+        if (pathString.startsWith('\\\\')) {
+             // Simplistic attempt: Just try to open it natively in Windows first
+             shell.openPath(pathString).then((err) => {
+                 if (err) {
+                     // If native open fails, log it
+                     console.error("Native open failed:", err);
+                 }
+             });
+             return; 
+        }
+
+        const cmd = `wsl --exec explorer.exe "${linuxPath}"`;
+        console.log("Executing WSL open:", cmd);
+        exec(cmd, (err) => {
+             if (err) console.error("Failed to open via WSL:", err);
+        });
+    } else {
+        // Normal Windows Path
+        shell.openPath(pathString).then((error) => {
+            if (error) console.error('Failed to open path:', error);
+        });
+    }
 });
 
 // --- HELPER ---
@@ -97,28 +128,18 @@ function getEnv(customEnv) {
 
 // --- REAL BACKEND API HANDLERS ---
 
-/**
- * Executes a Borg command
- */
 ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, envVars, forceBinary }) => {
   return new Promise((resolve) => {
     let bin, finalArgs;
-    
-    // Allow overriding the binary (e.g. using 'ssh' instead of 'borg' for cleanup tasks)
     const targetBinary = forceBinary || 'borg';
 
     if (useWsl) {
-        bin = 'wsl'; // Use system wsl.exe
-        // Use 'exec' inside WSL so env vars are picked up cleanly and we run the command
-        // args is an array like ['list', 'ssh://...']. 
-        // We convert to: wsl --exec borg list ssh://...
+        bin = 'wsl'; 
         finalArgs = ['--exec', targetBinary, ...args];
     } else {
-        // If native windows, and asking for borg, use configured path. Otherwise assume system path (e.g. ssh)
         bin = (targetBinary === 'borg') ? (executablePath || 'borg') : targetBinary;
         finalArgs = args;
         
-        // Verify existence if it looks like a full path and we aren't using WSL
         if ((bin.includes('\\') || bin.includes('/')) && !fs.existsSync(bin)) {
             const errorMsg = `Error: Executable not found at ${bin}`;
             if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: errorMsg });
@@ -127,59 +148,30 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
     }
 
     console.log(`[Borg] Executing: ${bin} ${finalArgs.join(' ')}`);
-    // Log env vars helpful for debugging (masking password)
-    if (envVars.BORG_PASSPHRASE) console.log(`[Borg] using passphrase: ****`);
-    if (envVars.BORG_RSH) console.log(`[Borg] using BORG_RSH: ${envVars.BORG_RSH}`);
     
     try {
         const child = spawn(bin, finalArgs, {
           env: getEnv(envVars),
-          shell: !useWsl // Use shell true for windows native to handle path parsing better, false for WSL usually ok
+          shell: !useWsl 
         });
 
-        // Store reference to allow killing later
         activeProcesses.set(commandId, child);
 
         child.stdout.on('data', (data) => {
           const text = data.toString();
-          console.log(`[Borg STDOUT] ${text.trim()}`); // Log to terminal for debugging
+          console.log(`[Borg STDOUT] ${text.trim()}`);
           if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: text });
         });
 
         child.stderr.on('data', (data) => {
           const text = data.toString();
-          console.error(`[Borg STDERR] ${text.trim()}`); // Log to terminal for debugging
-          
-          // WINBORG UX: Filter SSH warnings that scare users but are harmless
-          if (text.includes("Permanently added") || text.includes("known hosts")) {
-             // Optional: Don't send to frontend or send as info
-             // For now we still send it but maybe we can color it gray in frontend?
-             // Just pass it through.
-          }
-          
+          console.error(`[Borg STDERR] ${text.trim()}`);
           if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: text });
 
-          // WINBORG UX IMPROVEMENT: Detect common "command not found" errors
           const lower = text.toLowerCase();
-          if (
-              lower.includes('not recognized') || 
-              lower.includes('falsch geschrieben') || 
-              lower.includes('not found') ||
-              lower.includes('nicht gefunden')
-          ) {
-              const hint = `\n[WinBorg Hint] 🔴 Binary '${targetBinary}' not found!\n` +
-                           `1. If you want to use Windows native: Install it.\n` +
-                           `2. If you want to use WSL (Linux): Ensure it is installed in the distro.\n`;
+          if (lower.includes('not recognized') || lower.includes('falsch geschrieben') || lower.includes('not found')) {
+              const hint = `\n[WinBorg Hint] 🔴 Binary '${targetBinary}' not found!`;
               if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: hint });
-          }
-          
-          // Detect SSH Permission Denied (e.g. missing keys)
-          if (lower.includes('permission denied') && (lower.includes('publickey') || lower.includes('password'))) {
-             const hint = `\n[WinBorg Hint] 🔐 SSH Access Denied!\n` +
-                          `The server rejected the key. Borg cannot ask for passwords here.\n` +
-                          `FIX: Copy your SSH key to the server. Run this in your WSL terminal:\n` +
-                          `ssh-copy-id -p <PORT> <USER>@<HOST>`;
-             if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: hint });
           }
         });
 
@@ -190,13 +182,11 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
         });
 
         child.on('error', (err) => {
-          console.error(`[Borg] Failed to start process: ${err.message}`);
           activeProcesses.delete(commandId);
           if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: `Error: ${err.message}` });
           resolve({ success: false, error: err.message });
         });
     } catch (e) {
-        console.error(`[Borg] Critical Error: ${e.message}`);
         activeProcesses.delete(commandId);
         if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: `Critical Error: ${e.message}` });
         resolve({ success: false, error: e.message });
@@ -204,50 +194,31 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
   });
 });
 
-/**
- * Stop a running command (abort check/create etc)
- */
 ipcMain.handle('borg-stop', (event, { commandId }) => {
     return new Promise((resolve) => {
         const child = activeProcesses.get(commandId);
         if (child) {
-            console.log(`[Borg] Killing process ${commandId}`);
-            // SIGTERM is polite, but on Windows/WSL mixed environment sometimes we need force.
-            // child.kill() sends SIGTERM by default.
-            const killed = child.kill(); 
-            if (killed) {
-                // Determine if we need to cleanup map here or wait for close event.
-                // Close event will fire shortly.
-                resolve({ success: true });
-            } else {
-                 resolve({ success: false, error: "Could not kill process" });
-            }
+            child.kill(); 
+            resolve({ success: true });
         } else {
             resolve({ success: false, error: "Process not found" });
         }
     });
 });
 
-/**
- * Handle persistent mount processes
- */
 ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, envVars }) => {
   return new Promise((resolve) => {
     let bin, finalArgs;
-    // Track fuse error
     let fuseError = false;
     
     if (useWsl) {
         const mountPoint = args[args.length - 1]; 
-        // Improved Directory Creation:
-        // Use wsl --exec mkdir -p ... to ensuring linux command runs
         try {
             console.log(`[Borg Mount] Creating directory: ${mountPoint}`);
-            // Force create directory. Fail loudly if it fails.
             require('child_process').execSync(`wsl --exec mkdir -p "${mountPoint}"`);
         } catch(e) { 
             console.error(`[Borg Mount] Failed to create directory ${mountPoint}`, e.message);
-            if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: `FATAL ERROR: Failed to create mountpoint ${mountPoint}. It might require sudo or permission fixes.` });
+            if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: `FATAL ERROR: Failed to create mountpoint ${mountPoint}.` });
             return resolve({ success: false, error: "MKDIR_FAILED" });
         }
 
@@ -277,38 +248,27 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
           console.error(`[Mount Error] ${text}`);
           if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: text });
           
-          // FUSE DETECTION
-          // "no FUSE support" = python binding missing (old check)
-          // "failed to exec fusermount3" = fuse3 package missing (new check)
-          if (text.includes('no FUSE support') || text.includes('fusermount3') || text.includes('fusermount')) {
+          if (text.includes('no FUSE support') || text.includes('fusermount3')) {
               fuseError = true;
-              const hint = `\n[WinBorg Hint] 🔴 FUSE Missing or Incomplete!\n` +
-                           `Borg needs FUSE 3 to mount archives.\n` +
-                           `FIX: Run this in WSL: sudo apt install fuse3 libfuse2 python3-llfuse python3-pyfuse3 -y`;
+              const hint = `\n[WinBorg Hint] 🔴 FUSE Missing or Incomplete!`;
               if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: hint });
           }
           
           if (text.includes('Mountpoint must be a writable directory')) {
-               const hint = `\n[WinBorg Hint] 🚫 Permission Error\n` +
-                           `The folder '${args[args.length - 1]}' exists but you cannot write to it.\n` +
-                           `Solution: Use a path in your home directory (like ~/winborg) or /mnt/wsl/...`;
+               const hint = `\n[WinBorg Hint] 🚫 Permission Error - Use a linux path like /mnt/wsl/...`;
                if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: hint });
           }
         });
 
         child.on('close', (code) => {
-          console.log(`[Borg Mount] Mount process exited code ${code}`);
           activeMounts.delete(mountId);
           if (mainWindow) mainWindow.webContents.send('mount-exited', { mountId, code });
         });
 
-        // Wait to see if process stays alive
-        // Increased wait time slightly to catch immediate crashes
         setTimeout(() => {
             if (activeMounts.has(mountId)) {
                 resolve({ success: true, pid: child.pid });
             } else {
-                // If process died, check if it was due to FUSE
                 resolve({ 
                     success: false, 
                     error: fuseError ? 'FUSE_MISSING' : 'PROCESS_EXITED' 
@@ -331,7 +291,6 @@ ipcMain.handle('borg-unmount', (event, { mountId, localPath, useWsl, executableP
 
     let cmd;
     if (useWsl) {
-        // Force unmount using fusermount -u -z (lazy unmount) which is safer
         cmd = `wsl --exec fusermount3 -u -z ${localPath}`;
     } else {
         const bin = executablePath || 'borg';

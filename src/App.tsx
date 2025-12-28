@@ -180,19 +180,8 @@ const App: React.FC = () => {
         // AUTO OPEN EXPLORER
         try {
             const { ipcRenderer } = (window as any).require('electron');
-            let explorerPath = path;
-            
-            // Fix for WSL: Convert Linux path to UNC path
-            if (path.startsWith('/')) {
-                 // Convert /tmp/winborg... to \\wsl$\Ubuntu\tmp\winborg...
-                 // We assume default distro 'Ubuntu' for now, or let main process handle it more smartly
-                 // But a generic way is \\wsl.localhost\Ubuntu + path
-                 // Simpler: Just try sending the linux path and letting electron helper decide, 
-                 // but we'll do the replacement here for clarity.
-                 const relativePath = path.replace(/\//g, '\\');
-                 explorerPath = `\\\\wsl$\\Ubuntu${relativePath}`;
-            }
-            ipcRenderer.send('open-path', explorerPath);
+            // We pass the path directly. If it is linux path, backend will handle it via wsl --exec explorer.exe
+            ipcRenderer.send('open-path', path);
         } catch(e) { console.error("Could not auto-open explorer"); }
         
     } else {
