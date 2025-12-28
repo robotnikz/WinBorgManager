@@ -75,7 +75,8 @@ Most Borg repositories (like Hetzner StorageBox or rsync.net) require an SSH Key
 
 1.  Download the latest installer (`.exe`) from the [Releases Page](#).
 2.  Run the installer.
-3.  Open **WinBorg Manager**.
+3.  **Note:** Since this app is not signed with a paid certificate, **Windows SmartScreen** might warn you upon installation. Click **"More Info" -> "Run Anyway"** to install.
+4.  Open **WinBorg Manager**.
 
 ---
 
