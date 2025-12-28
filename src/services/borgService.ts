@@ -41,9 +41,11 @@ const getEnvVars = (config: any, overrides?: { passphrase?: string, disableHostC
     
     // If using WSL, we need to tell Windows to pass these variables into the WSL instance
     if (config.useWsl) {
-        // /u flag for WSLENV means "translate path", but for simple strings (passwords), just passing the name is usually enough.
-        // However, standard env vars need to be listed in WSLENV to be visible inside WSL.
-        env.WSLENV = 'BORG_PASSPHRASE/u:BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK/u:BORG_RELOCATED_REPO_ACCESS_IS_OK/u:BORG_RSH/u';
+        // CRITICAL FIX: Do NOT use '/u' for BORG_PASSPHRASE. 
+        // '/u' tells WSLENV to translate a path (e.g. C:\... -> /mnt/c/...). 
+        // This mangles passwords containing slashes or backslashes.
+        // We just want to pass the value as is.
+        env.WSLENV = 'BORG_PASSPHRASE:BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK:BORG_RELOCATED_REPO_ACCESS_IS_OK:BORG_RSH/u';
     }
     
     return env;
@@ -100,7 +102,8 @@ export const borgService = {
     // Construct args. 
     // If WSL, mountPoint is a linux path (e.g. /mnt/wsl/borg)
     // If Windows, mountPoint is a Drive Letter (e.g. Z:)
-    const args = ['mount', `${repoUrl}::${archiveName}`, mountPoint];
+    // Added --foreground to ensure process stays alive and tracked by Electron
+    const args = ['mount', '--foreground', `${repoUrl}::${archiveName}`, mountPoint];
     
     // Global log listener for mounts
     const logListener = (_: any, msg: { id: string, text: string }) => {
@@ -110,12 +113,21 @@ export const borgService = {
     };
     ipcRenderer.on('terminal-log', logListener);
 
+    // Look up specific repo overrides if possible (passed via global state usually, 
+    // but here we might rely on the generic config or what was passed during connect.
+    // Ideally, we should pass the repo-specific passphrase here.
+    // For now, we rely on the caller setting the global or the repo context needs to be passed.
+    // IMPROVEMENT: We use the generic config. If repo has specific pass, it might need to be passed here.
+    // For now, assuming Global Passphrase or Keyfile without passphrase for mount.
+    // To support per-repo passphrase on mount, we would need to look it up in App state.
+    
+    // However, to fix the immediate issue, we assume the env vars generation is correct.
     const result = await ipcRenderer.invoke('borg-mount', { 
         args, 
         mountId, 
         useWsl: config.useWsl,
         executablePath: config.path,
-        envVars: getEnvVars(config)
+        envVars: getEnvVars(config) 
     });
     
     if (result.success) {

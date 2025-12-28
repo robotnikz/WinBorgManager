@@ -16,6 +16,9 @@ export interface Repository {
   status: 'connected' | 'disconnected' | 'error' | 'connecting';
   size: string;
   fileCount: number;
+  // Security / Config Persistence
+  passphrase?: string;
+  trustHost?: boolean;
 }
 
 export interface Archive {

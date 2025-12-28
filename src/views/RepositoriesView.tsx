@@ -7,17 +7,19 @@ import { Plus, Search, X, ShieldAlert, Key, Terminal } from 'lucide-react';
 interface RepositoriesViewProps {
   repos: Repository[];
   onAddRepo: (repoData: { name: string; url: string; encryption: 'repokey' | 'keyfile' | 'none', passphrase?: string, trustHost?: boolean }) => void;
+  onEditRepo: (id: string, repoData: { name: string; url: string; encryption: 'repokey' | 'keyfile' | 'none', passphrase?: string, trustHost?: boolean }) => void;
   onConnect: (repo: Repository) => void;
   onMount: (repo: Repository) => void;
   onDelete: (repoId: string) => void;
 }
 
-const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, onConnect, onMount, onDelete }) => {
+const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, onEditRepo, onConnect, onMount, onDelete }) => {
   const [search, setSearch] = useState('');
-  const [isAdding, setIsAdding] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingRepoId, setEditingRepoId] = useState<string | null>(null);
   const [useWsl, setUseWsl] = useState(true);
   
-  const [newRepo, setNewRepo] = useState<{
+  const [repoForm, setRepoForm] = useState<{
     name: string;
     url: string;
     encryption: 'repokey' | 'keyfile' | 'none';
@@ -33,17 +35,38 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
 
   // Check backend mode when modal opens
   useEffect(() => {
-    if (isAdding) {
+    if (isModalOpen) {
         const storedWsl = localStorage.getItem('winborg_use_wsl');
         setUseWsl(storedWsl === null ? true : storedWsl === 'true');
     }
-  }, [isAdding]);
+  }, [isModalOpen]);
+
+  const handleOpenAdd = () => {
+      setRepoForm({ name: '', url: '', encryption: 'repokey', passphrase: '', trustHost: false });
+      setEditingRepoId(null);
+      setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (repo: Repository) => {
+      setRepoForm({
+          name: repo.name,
+          url: repo.url,
+          encryption: repo.encryption,
+          passphrase: repo.passphrase || '',
+          trustHost: repo.trustHost || false
+      });
+      setEditingRepoId(repo.id);
+      setIsModalOpen(true);
+  };
 
   const handleSave = () => {
-    if (newRepo.name && newRepo.url) {
-        onAddRepo(newRepo);
-        setIsAdding(false);
-        setNewRepo({ name: '', url: '', encryption: 'repokey', passphrase: '', trustHost: false });
+    if (repoForm.name && repoForm.url) {
+        if (editingRepoId) {
+            onEditRepo(editingRepoId, repoForm);
+        } else {
+            onAddRepo(repoForm);
+        }
+        setIsModalOpen(false);
     }
   };
 
@@ -55,12 +78,12 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
       {/* Modal Overlay */}
-      {isAdding && (
+      {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[2px] p-4 animate-in fade-in duration-200">
            <div className="bg-white rounded-xl shadow-2xl border border-gray-100 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 ring-1 ring-black/5">
              <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/80">
-               <h3 className="font-semibold text-slate-800">Add New Repository</h3>
-               <button onClick={() => setIsAdding(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+               <h3 className="font-semibold text-slate-800">{editingRepoId ? 'Edit Repository' : 'Add New Repository'}</h3>
+               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
                  <X size={18} />
                </button>
              </div>
@@ -90,8 +113,8 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                    autoFocus
                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm text-slate-900 transition-all shadow-sm"
                    placeholder="My Remote Backup"
-                   value={newRepo.name}
-                   onChange={e => setNewRepo({...newRepo, name: e.target.value})}
+                   value={repoForm.name}
+                   onChange={e => setRepoForm({...repoForm, name: e.target.value})}
                  />
                </div>
                <div>
@@ -100,8 +123,8 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                    type="text" 
                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm text-slate-900 font-mono transition-all shadow-sm"
                    placeholder="ssh://user@hostname:22/path/to/repo"
-                   value={newRepo.url}
-                   onChange={e => setNewRepo({...newRepo, url: e.target.value})}
+                   value={repoForm.url}
+                   onChange={e => setRepoForm({...repoForm, url: e.target.value})}
                  />
                  <p className="text-[10px] text-slate-400 mt-1">Format: ssh://user@host:port/path/to/repo</p>
                </div>
@@ -112,8 +135,8 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                      <div className="relative">
                         <select 
                           className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm text-slate-900 appearance-none shadow-sm"
-                          value={newRepo.encryption}
-                          onChange={e => setNewRepo({...newRepo, encryption: e.target.value as any})}
+                          value={repoForm.encryption}
+                          onChange={e => setRepoForm({...repoForm, encryption: e.target.value as any})}
                         >
                           <option value="repokey">Repokey</option>
                           <option value="keyfile">Keyfile</option>
@@ -129,8 +152,8 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                           type="password" 
                           className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm text-slate-900 shadow-sm"
                           placeholder="Optional"
-                          value={newRepo.passphrase}
-                          onChange={e => setNewRepo({...newRepo, passphrase: e.target.value})}
+                          value={repoForm.passphrase}
+                          onChange={e => setRepoForm({...repoForm, passphrase: e.target.value})}
                         />
                      </div>
                    </div>
@@ -144,8 +167,8 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                             type="checkbox" 
                             id="trust-host" 
                             className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                            checked={newRepo.trustHost}
-                            onChange={(e) => setNewRepo({...newRepo, trustHost: e.target.checked})}
+                            checked={repoForm.trustHost}
+                            onChange={(e) => setRepoForm({...repoForm, trustHost: e.target.checked})}
                         />
                      </div>
                      <div>
@@ -159,8 +182,8 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
              </div>
 
              <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
-               <Button variant="secondary" onClick={() => setIsAdding(false)}>Cancel</Button>
-               <Button onClick={handleSave} disabled={!newRepo.name || !newRepo.url}>Add Repository</Button>
+               <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancel</Button>
+               <Button onClick={handleSave} disabled={!repoForm.name || !repoForm.url}>{editingRepoId ? 'Save Changes' : 'Add Repository'}</Button>
              </div>
            </div>
         </div>
@@ -171,7 +194,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
           <h1 className="text-2xl font-bold text-slate-800">Repositories</h1>
           <p className="text-slate-500 text-sm mt-1">Manage your remote Borg repositories</p>
         </div>
-        <Button onClick={() => setIsAdding(true)}>
+        <Button onClick={handleOpenAdd}>
           <Plus className="w-4 h-4 mr-2" />
           Add Repository
         </Button>
@@ -196,6 +219,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
             onConnect={onConnect}
             onMount={onMount}
             onDelete={() => onDelete(repo.id)}
+            onEdit={handleOpenEdit}
           />
         ))}
         {filteredRepos.length === 0 && (

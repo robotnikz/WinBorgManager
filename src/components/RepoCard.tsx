@@ -1,15 +1,16 @@
 import React from 'react';
 import { Repository } from '../types';
-import { Server, Shield, Clock, HardDrive, Trash2, Loader2 } from 'lucide-react';
+import { Server, Shield, Clock, HardDrive, Trash2, Loader2, Edit2 } from 'lucide-react';
 
 interface RepoCardProps {
   repo: Repository;
   onMount?: (repo: Repository) => void;
   onConnect?: (repo: Repository) => void;
   onDelete?: (repo: Repository) => void;
+  onEdit?: (repo: Repository) => void;
 }
 
-const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete }) => {
+const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete, onEdit }) => {
   return (
     <div className="bg-white rounded-xl border border-gray-200/75 p-5 shadow-sm hover:shadow-md transition-all duration-200 group">
       <div className="flex justify-between items-start mb-4">
@@ -33,6 +34,17 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete 
             }`}>
               {repo.status === 'connected' ? 'Active' : repo.status === 'connecting' ? 'Connecting...' : 'Offline'}
             </div>
+            
+            {onEdit && (
+                <button 
+                    onClick={() => onEdit(repo)}
+                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                    title="Edit Repository"
+                >
+                    <Edit2 className="w-4 h-4" />
+                </button>
+            )}
+
             {onDelete && (
                 <button 
                     onClick={() => onDelete(repo)}

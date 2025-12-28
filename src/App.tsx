@@ -164,6 +164,10 @@ const App: React.FC = () => {
   // Standard Connect (uses global settings)
   const handleConnect = (repo: Repository, overrides?: { passphrase?: string, disableHostCheck?: boolean }) => {
     setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, status: 'connecting' } : r));
+    
+    // Prefer repo-specific passphrase if available
+    const effectivePassphrase = overrides?.passphrase || repo.passphrase;
+    const effectiveHostCheck = overrides?.disableHostCheck !== undefined ? overrides.disableHostCheck : repo.trustHost;
 
     // Step 1: List Archives
     runCommand(
@@ -220,7 +224,7 @@ const App: React.FC = () => {
                                  console.warn("Could not parse info stats", e);
                              }
                         },
-                        overrides
+                        { passphrase: effectivePassphrase, disableHostCheck: effectiveHostCheck }
                      );
                 }, 800);
 
@@ -229,7 +233,7 @@ const App: React.FC = () => {
                 setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, status: 'error' } : r));
             }
         },
-        overrides // Pass specific overrides (password/ssh) if provided
+        { passphrase: effectivePassphrase, disableHostCheck: effectiveHostCheck }
     );
   };
 
@@ -256,15 +260,32 @@ const App: React.FC = () => {
        encryption: repoData.encryption,
        status: 'disconnected',
        size: 'Unknown',
-       fileCount: 0
+       fileCount: 0,
+       passphrase: repoData.passphrase,
+       trustHost: repoData.trustHost
     };
     setRepos(prev => [...prev, newRepo]);
     
     // Auto try to connect using the provided credentials
-    handleConnect(newRepo, {
-        passphrase: repoData.passphrase,
-        disableHostCheck: repoData.trustHost
-    });
+    handleConnect(newRepo);
+  };
+
+  const handleEditRepo = (id: string, repoData: { name: string; url: string; encryption: 'repokey' | 'keyfile' | 'none', passphrase?: string, trustHost?: boolean }) => {
+     setRepos(prev => prev.map(r => {
+         if (r.id === id) {
+             return {
+                 ...r,
+                 name: repoData.name,
+                 url: repoData.url,
+                 encryption: repoData.encryption,
+                 passphrase: repoData.passphrase,
+                 trustHost: repoData.trustHost,
+                 // Reset status on edit to force reconnect logic
+                 status: 'disconnected' as const
+             };
+         }
+         return r;
+     }));
   };
 
   const handleDeleteRepo = (repoId: string) => {
@@ -280,6 +301,7 @@ const App: React.FC = () => {
           <RepositoriesView 
             repos={repos} 
             onAddRepo={handleAddRepo} 
+            onEditRepo={handleEditRepo}
             onConnect={handleConnect}
             onMount={handleQuickMount}
             onDelete={handleDeleteRepo}
