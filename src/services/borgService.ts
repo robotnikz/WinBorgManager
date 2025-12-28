@@ -65,20 +65,22 @@ const extractJson = (text: string) => {
 
 // Helper to parse URL
 const parseBorgUrl = (url: string) => {
-    try {
-        if (url.startsWith('ssh://')) {
-            const u = new URL(url);
-            return {
-                isSsh: true,
-                user: u.username,
-                host: u.hostname,
-                port: u.port || '22',
-                path: u.pathname // careful with leading /
-            };
-        }
-    } catch(e) {}
+    // 1. Explicit SSH URL: ssh://user@host:port/path
+    // Regex matches: ssh:// [user@] host [:port] /path
+    const sshRegex = /^ssh:\/\/(?:([^@]+)@)?([^:/]+)(?::(\d+))?(.*)$/;
+    const sshMatch = url.match(sshRegex);
     
-    // SCP Style: user@host:path
+    if (sshMatch) {
+        return {
+            isSsh: true,
+            user: sshMatch[1], // undefined if missing
+            host: sshMatch[2],
+            port: sshMatch[3] || '22',
+            path: sshMatch[4] // includes leading /
+        };
+    }
+    
+    // 2. SCP Style: user@host:path
     const scpMatch = url.match(/^([^@]+)@([^:]+):(.*)$/);
     if (scpMatch) {
         return {
@@ -90,7 +92,7 @@ const parseBorgUrl = (url: string) => {
         };
     }
     
-    // Local path
+    // 3. Local path (or catch-all)
     return { isSsh: false, path: url };
 };
 
@@ -166,14 +168,22 @@ export const borgService = {
       const config = getBorgConfig();
 
       if (parsed.isSsh) {
+          // Construct user@host
           const userHost = `${parsed.user ? parsed.user + '@' : ''}${parsed.host}`;
+          
+          if (!parsed.host) {
+               onLog("Error: Hostname could not be determined from URL.");
+               return false;
+          }
+
           // Clean path: Ensure we don't double slash if not needed, but typical borg paths are absolute or relative to home
           const basePath = parsed.path!;
+          
           // Construct the removal command
           const removeCmd = `rm -rf "${basePath}/lock.roster" "${basePath}/lock.exclusive"`;
           
-          onLog(`Connecting to ${userHost} via SSH to delete lock files...`);
-          onLog(`Command: ${removeCmd}`);
+          onLog(`Connecting to ${userHost} (Port ${parsed.port}) via SSH...`);
+          onLog(`Remote Command: ${removeCmd}`);
           
           // Execute SSH via borgService's generic runner but forcing 'ssh' binary
           const args = [
@@ -198,21 +208,12 @@ export const borgService = {
           
           onLog(`Deleting local lock files in: ${basePath}`);
           
-          // Use 'rm -rf' because in WSL/GitBash/Mac/Linux this works.
-          // Even on Windows if using WSL backend, this runs in WSL so 'rm' works.
-          // If native windows, we might need 'del'. 
-          
           if (config.useWsl) {
                return await borgService.runCommand(['-rf', rosterPath, exclusivePath], onLog, {
                    ...overrides,
                    forceBinary: 'rm'
                });
           } else {
-              // Windows Native
-              // We use powershell or cmd via the spawn mechanism
-              // But 'borg-spawn' expects a binary. 'rm' is an alias in PS, not binary.
-              // Try cmd /c del. But folder needs rmdir.
-              // Easier: Just try 'rm' assuming User has git bash or similar, or just fail safely.
               onLog("Manual local deletion on Native Windows not fully supported via UI. Please delete files manually via Explorer.");
               return false;
           }
