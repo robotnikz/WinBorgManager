@@ -128,14 +128,19 @@ function getEnv(customEnv) {
 
 // --- REAL BACKEND API HANDLERS ---
 
-ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, envVars, forceBinary }) => {
+ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, envVars, forceBinary, wslUser }) => {
   return new Promise((resolve) => {
     let bin, finalArgs;
     const targetBinary = forceBinary || 'borg';
 
     if (useWsl) {
         bin = 'wsl'; 
-        finalArgs = ['--exec', targetBinary, ...args];
+        // Support running as specific user (e.g. root) for setup tasks
+        if (wslUser) {
+            finalArgs = ['-u', wslUser, '--exec', targetBinary, ...args];
+        } else {
+            finalArgs = ['--exec', targetBinary, ...args];
+        }
     } else {
         bin = (targetBinary === 'borg') ? (executablePath || 'borg') : targetBinary;
         finalArgs = args;
@@ -257,7 +262,7 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
 
           if (text.includes('user_allow_other')) {
               fuseError = true;
-              const hint = `\n[WinBorg Hint] 🔴 'user_allow_other' not in /etc/fuse.conf! Run the setup command.`;
+              const hint = `\n[WinBorg Hint] 🔴 'user_allow_other' missing. Attempting auto-fix failed.`;
               if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: hint });
           }
           

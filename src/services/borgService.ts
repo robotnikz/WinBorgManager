@@ -135,6 +135,40 @@ export const borgService = {
   },
 
   /**
+   * AUTOMATED FIX for WSL FUSE permissions.
+   * Runs as WSL ROOT (passwordless usually) to:
+   * 1. Add 'user_allow_other' to /etc/fuse.conf if missing
+   * 2. chmod /dev/fuse to ensure user access
+   */
+  ensureFuseConfig: async (onLog: (text: string) => void): Promise<boolean> => {
+      const config = getBorgConfig();
+      if (!config.useWsl) return true; // Not needed for native
+
+      onLog("[Auto-Setup] Checking FUSE permissions in WSL...");
+
+      // Command: "if grep -q ...; then ...; else ...; fi"
+      // We run this inside 'bash -c' inside 'wsl -u root'
+      // This allows modifying /etc/fuse.conf without user interaction
+      const fixCmd = `
+        if ! grep -q "user_allow_other" /etc/fuse.conf; then 
+            echo "user_allow_other" >> /etc/fuse.conf; 
+            echo "Added user_allow_other to /etc/fuse.conf";
+        fi && 
+        chmod 666 /dev/fuse &&
+        echo "FUSE permissions verified."
+      `;
+
+      return await ipcRenderer.invoke('borg-spawn', { 
+          commandId: 'fuse-setup', 
+          useWsl: true,
+          envVars: {},
+          forceBinary: 'bash',
+          wslUser: 'root', // MAGIC: Run as root via WSL to bypass password prompt
+          args: ['-c', fixCmd]
+      }).then((res: any) => res.success);
+  },
+
+  /**
    * Remove locks (lock.roster, lock.exclusive) from a repository.
    * Standard Borg 'break-lock'.
    */
@@ -281,11 +315,14 @@ export const borgService = {
   ): Promise<{ success: boolean; mountId?: string; error?: string }> => {
     const mountId = `mount-${Date.now()}`;
     const config = getBorgConfig();
+
+    // STEP 1: SILENTLY FIX PERMISSIONS (if using WSL)
+    if (config.useWsl) {
+        await borgService.ensureFuseConfig(onLog);
+    }
     
     // Construct args. 
     // CRITICAL for Windows Access: '-o allow_other'
-    // This allows the Windows User (who connects via Plan9 network share) to see the files 
-    // owned by the WSL linux user. Without this, Explorer shows "Access Denied".
     const args = [
         'mount', 
         '--foreground', 
