@@ -1,22 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import RepositoriesView from './views/RepositoriesView';
 import MountsView from './views/MountsView';
 import SettingsView from './views/SettingsView';
 import TerminalModal from './components/TerminalModal';
 import { View, Repository, MountPoint, Archive } from './types';
-import { MOCK_REPOS, MOCK_MOUNTS, MOCK_ARCHIVES } from './constants';
+import { MOCK_REPOS, MOCK_ARCHIVES } from './constants';
 import { HardDrive } from 'lucide-react';
 import { borgService } from './services/borgService';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
   
-  // Real State (Initialized with mocks, but editable)
-  const [repos, setRepos] = useState<Repository[]>(MOCK_REPOS);
+  // Initialize from LocalStorage or fallback to Mocks
+  const [repos, setRepos] = useState<Repository[]>(() => {
+    const saved = localStorage.getItem('winborg_repos');
+    return saved ? JSON.parse(saved) : MOCK_REPOS;
+  });
+
   const [mounts, setMounts] = useState<MountPoint[]>([]);
-  // In a real app, you would fetch archives from 'borg list' output
-  const [archives, setArchives] = useState<Archive[]>(MOCK_ARCHIVES);
+  const [archives, setArchives] = useState<Archive[]>([]);
+  
+  // Persist Repos when they change
+  useEffect(() => {
+    localStorage.setItem('winborg_repos', JSON.stringify(repos));
+  }, [repos]);
 
   // Terminal State
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
@@ -24,22 +32,26 @@ const App: React.FC = () => {
   const [terminalTitle, setTerminalTitle] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const runCommand = async (title: string, args: string[], onSuccess: () => void) => {
+  // Helper to run commands with terminal feedback
+  const runCommand = async (title: string, args: string[], onSuccess?: (output: string) => void) => {
     setIsTerminalOpen(true);
     setTerminalTitle(title);
     setTerminalLogs([]);
     setIsProcessing(true);
 
+    let fullOutput = '';
     const success = await borgService.runCommand(args, (log) => {
-        setTerminalLogs(prev => [...prev, log.trim()]);
+        const cleanLog = log.trim();
+        setTerminalLogs(prev => [...prev, cleanLog]);
+        fullOutput += cleanLog;
     });
 
     setIsProcessing(false);
     if (success) {
-        onSuccess();
-        setTimeout(() => setIsTerminalOpen(false), 1500);
+        if (onSuccess) onSuccess(fullOutput);
+        setTimeout(() => setIsTerminalOpen(false), 1000);
     } else {
-        setTerminalLogs(prev => [...prev, "Command failed."]);
+        setTerminalLogs(prev => [...prev, "Command failed. Check settings or network."]);
     }
   };
 
@@ -76,9 +88,20 @@ const App: React.FC = () => {
   };
 
   const handleQuickMount = (repo: Repository) => {
-    const latestArchive = archives[0]?.name || 'latest-snapshot';
-    const drive = 'Z:'; // Default
-    handleMount(repo.id, latestArchive, drive);
+    // If we have archives loaded for this repo, use the first one. 
+    // Realistically, we should filter archives by repo ID, but for now we assume 'archives' state holds the currently connected repo's archives.
+    const latestArchive = archives.length > 0 ? archives[0].name : 'latest';
+    
+    // Smart drive selection for Windows
+    const usedDrives = mounts.map(m => m.localPath);
+    const driveLetters = ['Z:', 'Y:', 'X:', 'W:', 'V:'];
+    const drive = driveLetters.find(d => !usedDrives.includes(d)) || 'Z:';
+    
+    // Check if WSL
+    const isWsl = localStorage.getItem('winborg_use_wsl') === 'true';
+    const mountPath = isWsl ? `/mnt/wsl/borg-${repo.name.replace(/\s+/g, '-')}` : drive;
+
+    handleMount(repo.id, latestArchive, mountPath);
   };
 
   const handleUnmount = async (id: string) => {
@@ -97,11 +120,43 @@ const App: React.FC = () => {
   };
 
   const handleConnect = (repo: Repository) => {
-    // 'borg info' verifies the repo exists and is accessible
-    runCommand(`Connecting to ${repo.name}`, ['info', repo.url], () => {
-        setRepos(prev => prev.map(r => 
-          r.id === repo.id ? { ...r, status: 'connected' as const } : r
-        ));
+    // 1. Update status to loading UI immediately
+    setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, status: 'connecting' } : r));
+
+    // 2. Run 'borg list --json' to get archives and verify connection
+    runCommand(`Connecting to ${repo.name}`, ['list', '--json', repo.url], (jsonOutput) => {
+        try {
+            // Borg might output some text before the JSON (like warnings), so we try to find the JSON start
+            const jsonStartIndex = jsonOutput.indexOf('{');
+            const jsonString = jsonStartIndex > -1 ? jsonOutput.substring(jsonStartIndex) : jsonOutput;
+            
+            const data = JSON.parse(jsonString);
+            
+            // Transform Borg JSON to our Archive type
+            const newArchives: Archive[] = data.archives.map((a: any) => ({
+                id: a.id || a.name,
+                name: a.name,
+                time: a.time,
+                size: 'Unknown', // List JSON doesn't always have size, info does
+                duration: 'Unknown'
+            })).reverse(); // Newest first
+
+            setArchives(newArchives);
+
+            // Update Repo Status
+            setRepos(prev => prev.map(r => 
+              r.id === repo.id ? { 
+                  ...r, 
+                  status: 'connected', 
+                  lastBackup: newArchives[0]?.time || 'Never',
+                  fileCount: newArchives.length 
+              } : r
+            ));
+        } catch (e) {
+            console.error("Failed to parse Borg JSON", e);
+            // Fallback for non-JSON output or errors
+            setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, status: 'error' } : r));
+        }
     });
   };
 
@@ -110,7 +165,7 @@ const App: React.FC = () => {
        id: Math.random().toString(36).substr(2, 9),
        name: repoData.name,
        url: repoData.url,
-       lastBackup: 'Unknown',
+       lastBackup: 'Never',
        encryption: repoData.encryption,
        status: 'disconnected',
        size: 'Unknown',
@@ -162,8 +217,8 @@ const App: React.FC = () => {
              
              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                 <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-6 text-white shadow-lg shadow-blue-200">
-                   <div className="opacity-80 text-sm font-medium mb-1">Protected Data</div>
-                   <div className="text-4xl font-bold">{repos.length > 0 ? repos[0].size : '0 B'}</div>
+                   <div className="opacity-80 text-sm font-medium mb-1">Total Repositories</div>
+                   <div className="text-4xl font-bold">{repos.length}</div>
                 </div>
                 
                 <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
@@ -172,8 +227,9 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-                   <div className="text-slate-500 text-sm font-medium mb-1">Repositories</div>
-                   <div className="text-4xl font-bold text-slate-800">{repos.length}</div>
+                   <div className="text-slate-500 text-sm font-medium mb-1">Loaded Archives</div>
+                   <div className="text-4xl font-bold text-slate-800">{archives.length}</div>
+                   <div className="text-xs text-slate-400 mt-2">From last connection</div>
                 </div>
              </div>
           </div>

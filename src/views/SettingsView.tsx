@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import Button from '../components/Button';
-import { User, Save, Terminal, Shield, Check, Key, AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react';
+import { User, Save, Terminal, Shield, Check, Key, AlertTriangle, ExternalLink, RefreshCw, Network } from 'lucide-react';
 import { borgService } from '../services/borgService';
 
 const SettingsView: React.FC = () => {
   const [useWsl, setUseWsl] = useState(false);
   const [borgPath, setBorgPath] = useState('borg');
   const [borgPassphrase, setBorgPassphrase] = useState('');
+  const [disableHostCheck, setDisableHostCheck] = useState(false);
   const [saved, setSaved] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 
@@ -14,16 +15,19 @@ const SettingsView: React.FC = () => {
     const storedWsl = localStorage.getItem('winborg_use_wsl');
     const storedPath = localStorage.getItem('winborg_executable_path');
     const storedPass = localStorage.getItem('winborg_passphrase');
+    const storedHostCheck = localStorage.getItem('winborg_disable_host_check');
     
     if (storedWsl) setUseWsl(storedWsl === 'true');
     if (storedPath) setBorgPath(storedPath);
     if (storedPass) setBorgPassphrase(storedPass);
+    if (storedHostCheck) setDisableHostCheck(storedHostCheck === 'true');
   }, []);
 
   const handleSave = () => {
     localStorage.setItem('winborg_use_wsl', String(useWsl));
     localStorage.setItem('winborg_executable_path', borgPath);
     localStorage.setItem('winborg_passphrase', borgPassphrase);
+    localStorage.setItem('winborg_disable_host_check', String(disableHostCheck));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -129,12 +133,31 @@ const SettingsView: React.FC = () => {
                         placeholder="••••••••••••"
                     />
                 </div>
-                <p className="text-xs text-slate-400 mt-2">
-                    Note: If you use different passwords for different repos, leave this blank and you will be prompted (in a future update).
-                </p>
             </div>
+
+            {/* SSH Options */}
+             <div className="pt-4 border-t border-gray-100">
+                 <h3 className="text-sm font-medium text-slate-700 mb-3 flex items-center gap-2">
+                     <Network className="w-4 h-4" /> SSH & Connection
+                 </h3>
+                 <div className="flex items-center gap-3">
+                     <input 
+                        type="checkbox" 
+                        id="host-check" 
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        checked={disableHostCheck}
+                        onChange={(e) => setDisableHostCheck(e.target.checked)}
+                     />
+                     <div>
+                         <label htmlFor="host-check" className="text-sm font-medium text-slate-800">Disable Strict Host Key Checking</label>
+                         <p className="text-xs text-slate-500">
+                             Automatically accept unknown SSH host keys. Essential for automated connections, but less secure against Man-in-the-Middle attacks.
+                         </p>
+                     </div>
+                 </div>
+             </div>
             
-            <div>
+            <div className="pt-4">
                  <Button 
                     variant="secondary" 
                     onClick={handleTest}

@@ -1,3 +1,4 @@
+
 export enum View {
   DASHBOARD = 'DASHBOARD',
   REPOSITORIES = 'REPOSITORIES',
@@ -12,7 +13,7 @@ export interface Repository {
   url: string; // ssh://user@host:port/path
   lastBackup: string;
   encryption: 'repokey' | 'keyfile' | 'none';
-  status: 'connected' | 'disconnected' | 'error';
+  status: 'connected' | 'disconnected' | 'error' | 'connecting';
   size: string;
   fileCount: number;
 }
