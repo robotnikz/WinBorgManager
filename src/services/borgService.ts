@@ -29,6 +29,8 @@ const getEnvVars = (config: any, overrides?: { passphrase?: string, disableHostC
         // Flags to allow remote access even if unknown
         BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK: 'yes',
         BORG_RELOCATED_REPO_ACCESS_IS_OK: 'yes',
+        // FORCE non-interactive mode. If passphrase is wrong/missing, fail immediately instead of prompting.
+        BORG_DISPLAY_PASSPHRASE: 'no' 
     };
     
     // Construct SSH Command with BatchMode=yes to prevent hangs.
@@ -46,8 +48,8 @@ const getEnvVars = (config: any, overrides?: { passphrase?: string, disableHostC
         // CRITICAL FIX: Do NOT use '/u' for BORG_PASSPHRASE. 
         // '/u' tells WSLENV to translate a path (e.g. C:\... -> /mnt/c/...). 
         // This mangles passwords containing slashes or backslashes.
-        // Also removed '/u' from BORG_RSH because it is a command string, not a single path.
-        env.WSLENV = 'BORG_PASSPHRASE:BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK:BORG_RELOCATED_REPO_ACCESS_IS_OK:BORG_RSH';
+        // We add BORG_DISPLAY_PASSPHRASE here too.
+        env.WSLENV = 'BORG_PASSPHRASE:BORG_DISPLAY_PASSPHRASE:BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK:BORG_RELOCATED_REPO_ACCESS_IS_OK:BORG_RSH';
     }
     
     return env;

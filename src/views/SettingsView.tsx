@@ -151,7 +151,9 @@ const SettingsView: React.FC = () => {
                         placeholder="••••••••••••"
                     />
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1">Default passphrase used if not specified per-repo.</p>
+                <p className="text-[10px] text-green-600 mt-1 flex items-center gap-1">
+                    <Check className="w-3 h-3" /> Auto-injected. You will <b>not</b> be prompted in terminal.
+                </p>
             </div>
 
             {/* SSH Options */}

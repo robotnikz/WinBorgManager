@@ -159,6 +159,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                           onChange={e => setRepoForm({...repoForm, passphrase: e.target.value})}
                         />
                      </div>
+                     <p className="text-[9px] text-green-600 mt-1">Auto-injected into background process.</p>
                    </div>
                </div>
 
