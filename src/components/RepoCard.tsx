@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { Repository } from '../types';
-import { Server, Shield, Clock, HardDrive, Trash2, Loader2, Edit2, ShieldCheck } from 'lucide-react';
+import { Server, Shield, Clock, HardDrive, Trash2, Loader2, Edit2, ShieldCheck, Unlock } from 'lucide-react';
 
 interface RepoCardProps {
   repo: Repository;
@@ -9,9 +10,10 @@ interface RepoCardProps {
   onDelete?: (repo: Repository) => void;
   onEdit?: (repo: Repository) => void;
   onCheck?: (repo: Repository) => void;
+  onBreakLock?: (repo: Repository) => void;
 }
 
-const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete, onEdit, onCheck }) => {
+const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete, onEdit, onCheck, onBreakLock }) => {
   return (
     <div className="bg-white rounded-xl border border-gray-200/75 p-5 shadow-sm hover:shadow-md transition-all duration-200 group">
       <div className="flex justify-between items-start mb-4">
@@ -93,14 +95,26 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
             )}
          </div>
          
-         {onCheck && repo.status === 'connected' && (
-            <button 
-               onClick={() => onCheck(repo)}
-               className="w-full px-3 py-1.5 text-[10px] font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-transparent hover:border-slate-200 rounded-md transition-colors flex items-center justify-center gap-2"
-            >
-               <ShieldCheck className="w-3 h-3" /> Verify Integrity
-            </button>
-         )}
+         <div className="flex gap-2">
+             {onCheck && repo.status === 'connected' && (
+                <button 
+                   onClick={() => onCheck(repo)}
+                   className="flex-1 px-3 py-1.5 text-[10px] font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-transparent hover:border-slate-200 rounded-md transition-colors flex items-center justify-center gap-2"
+                >
+                   <ShieldCheck className="w-3 h-3" /> Verify Integrity
+                </button>
+             )}
+             
+             {onBreakLock && (
+                 <button 
+                   onClick={() => onBreakLock(repo)}
+                   className="flex-1 px-3 py-1.5 text-[10px] font-medium text-orange-500 hover:text-orange-700 hover:bg-orange-50 border border-transparent hover:border-orange-200 rounded-md transition-colors flex items-center justify-center gap-2"
+                   title="Delete lock.roster and lock.exclusive to fix locked repo"
+                >
+                   <Unlock className="w-3 h-3" /> Unlock Repo
+                </button>
+             )}
+         </div>
       </div>
     </div>
   );

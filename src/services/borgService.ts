@@ -101,6 +101,22 @@ export const borgService = {
   },
 
   /**
+   * Remove locks (lock.roster, lock.exclusive) from a repository
+   */
+  breakLock: async (
+    repoUrl: string,
+    onLog: (text: string) => void,
+    overrides?: { passphrase?: string, disableHostCheck?: boolean }
+  ): Promise<boolean> => {
+      // 'break-lock' deletes the lock files
+      return await borgService.runCommand(
+          ['break-lock', repoUrl],
+          onLog,
+          overrides
+      );
+  },
+
+  /**
    * Fetch specific info for a single archive (Size, Duration)
    * Runs `borg info --json repo::archive`
    */

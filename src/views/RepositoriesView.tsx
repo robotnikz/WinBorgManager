@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Repository } from '../types';
 import RepoCard from '../components/RepoCard';
@@ -12,9 +13,10 @@ interface RepositoriesViewProps {
   onMount: (repo: Repository) => void;
   onCheck: (repo: Repository) => void;
   onDelete: (repoId: string) => void;
+  onBreakLock: (repo: Repository) => void;
 }
 
-const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, onEditRepo, onConnect, onMount, onCheck, onDelete }) => {
+const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, onEditRepo, onConnect, onMount, onCheck, onDelete, onBreakLock }) => {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRepoId, setEditingRepoId] = useState<string | null>(null);
@@ -220,6 +222,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
             onConnect={onConnect}
             onMount={onMount}
             onCheck={onCheck}
+            onBreakLock={onBreakLock}
             onDelete={() => onDelete(repo.id)}
             onEdit={handleOpenEdit}
           />

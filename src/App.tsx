@@ -383,6 +383,36 @@ const App: React.FC = () => {
           await borgService.stopCommand(repo.activeCommandId);
       }
   };
+  
+  /**
+   * BREAK LOCK HANDLER
+   * Runs 'borg break-lock' to remove lock.roster and lock.exclusive
+   */
+  const handleBreakLock = async (repo: Repository) => {
+      if(!window.confirm(`Are you sure you want to break the lock for ${repo.name}?\n\nThis will delete 'lock.roster' and 'lock.exclusive'. Only do this if you are sure no other backup process is currently running.`)) {
+          return;
+      }
+
+      setIsTerminalOpen(true);
+      setTerminalTitle(`Breaking Lock for ${repo.name}`);
+      setTerminalLogs([]);
+      setIsProcessing(true);
+
+      const success = await borgService.breakLock(
+          repo.url,
+          (log) => setTerminalLogs(prev => [...prev, log.trim()]),
+          { passphrase: repo.passphrase, disableHostCheck: repo.trustHost }
+      );
+
+      setIsProcessing(false);
+      
+      if(success) {
+          setTerminalLogs(prev => [...prev, "Lock successfully removed."]);
+          setTimeout(() => setIsTerminalOpen(false), 2000);
+      } else {
+          setTerminalLogs(prev => [...prev, "Failed to break lock."]);
+      }
+  };
 
   /**
    * New Quick Mount: 
@@ -465,6 +495,7 @@ const App: React.FC = () => {
             onConnect={handleConnect}
             onMount={handleQuickMount}
             onCheck={handleCheckIntegrity}
+            onBreakLock={handleBreakLock}
             onDelete={handleDeleteRepo}
           />
         );
