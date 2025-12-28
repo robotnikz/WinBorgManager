@@ -42,8 +42,6 @@ app.on('window-all-closed', () => {
 function getEnv(customEnv) {
     return { 
         ...process.env, 
-        BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK: 'yes',
-        BORG_RELOCATED_REPO_ACCESS_IS_OK: 'yes',
         ...customEnv 
     };
 }
@@ -53,25 +51,34 @@ function getEnv(customEnv) {
 /**
  * Executes a Borg command
  */
-ipcMain.handle('borg-spawn', (event, { args, commandId, executablePath, envVars }) => {
+ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, envVars }) => {
   return new Promise((resolve) => {
-    const bin = executablePath || 'borg';
-    
-    // Verify existence if it looks like a full path
-    if (bin.includes('\\') || bin.includes('/')) {
-        if (!fs.existsSync(bin)) {
+    let bin, finalArgs;
+
+    if (useWsl) {
+        bin = 'wsl'; // Use system wsl.exe
+        // Use 'exec' inside WSL so env vars are picked up cleanly and we run the command
+        // args is an array like ['list', 'ssh://...']. 
+        // We convert to: wsl --exec borg list ssh://...
+        finalArgs = ['--exec', 'borg', ...args];
+    } else {
+        bin = executablePath || 'borg';
+        finalArgs = args;
+        
+        // Verify existence if it looks like a full path and we aren't using WSL
+        if ((bin.includes('\\') || bin.includes('/')) && !fs.existsSync(bin)) {
             const errorMsg = `Error: Executable not found at ${bin}`;
             if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: errorMsg });
             return resolve({ success: false, error: errorMsg });
         }
     }
 
-    console.log(`[Borg] Executing: ${bin} ${args.join(' ')}`);
+    console.log(`[Borg] Executing: ${bin} ${finalArgs.join(' ')}`);
     
     try {
-        const child = spawn(bin, args, {
+        const child = spawn(bin, finalArgs, {
           env: getEnv(envVars),
-          shell: true 
+          shell: !useWsl // Use shell true for windows native to handle path parsing better, false for WSL usually ok
         });
 
         child.stdout.on('data', (data) => {
@@ -102,15 +109,38 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, executablePath, envVars 
 /**
  * Handle persistent mount processes
  */
-ipcMain.handle('borg-mount', (event, { args, mountId, executablePath, envVars }) => {
+ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, envVars }) => {
   return new Promise((resolve) => {
-    const bin = executablePath || 'borg';
-    console.log(`[Borg Mount] Starting mount: ${bin} ${args.join(' ')}`);
+    let bin, finalArgs;
+    
+    if (useWsl) {
+        // For mounting in WSL: mkdir -p [mountpoint] first
+        // We can't easily do two commands in one spawn unless we wrap in bash -c
+        // But let's assume the user picks a folder that exists or we try to create it blindly first?
+        // Let's do a quick sync exec to mkdir
+        const mountPoint = args[args.length - 1]; // last arg is mountpoint
+        try {
+            // "wsl mkdir -p /tmp/mount"
+            require('child_process').execSync(`wsl mkdir -p ${mountPoint}`);
+        } catch(e) { /* ignore if fails, maybe exists */ }
+
+        bin = 'wsl';
+        // borg mount -f (foreground) is usually required to keep the process alive for Electron to track
+        finalArgs = ['--exec', 'borg', ...args];
+        // Ensure we are in foreground mode if not already passed? Borg mount implies -f usually in scripts, 
+        // but if we spawn it, it stays running until killed.
+        
+    } else {
+        bin = executablePath || 'borg';
+        finalArgs = args;
+    }
+
+    console.log(`[Borg Mount] Starting mount: ${bin} ${finalArgs.join(' ')}`);
     
     try {
-        const child = spawn(bin, args, {
+        const child = spawn(bin, finalArgs, {
             env: getEnv(envVars),
-            shell: true
+            shell: !useWsl
         });
 
         activeMounts.set(mountId, child);
@@ -143,18 +173,25 @@ ipcMain.handle('borg-mount', (event, { args, mountId, executablePath, envVars })
   });
 });
 
-ipcMain.handle('borg-unmount', (event, { mountId, localPath, executablePath }) => {
+ipcMain.handle('borg-unmount', (event, { mountId, localPath, useWsl, executablePath }) => {
   return new Promise((resolve) => {
-    // 1. Try to kill the process if we tracked it
+    // 1. Try to kill the process if we tracked it (This stops the foreground mount command)
     if (activeMounts.has(mountId)) {
         const child = activeMounts.get(mountId);
-        child.kill();
+        child.kill(); 
         activeMounts.delete(mountId);
     }
 
-    const bin = executablePath || 'borg';
-    // 2. Also run 'borg umount' command just in case
-    exec(`"${bin}" umount ${localPath}`, (err) => {
+    // 2. Also run 'umount' command just in case it's stuck or detached
+    let cmd;
+    if (useWsl) {
+        cmd = `wsl --exec borg umount ${localPath}`;
+    } else {
+        const bin = executablePath || 'borg';
+        cmd = `"${bin}" umount ${localPath}`;
+    }
+
+    exec(cmd, (err) => {
         resolve({ success: true });
     });
   });

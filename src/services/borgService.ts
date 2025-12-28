@@ -5,6 +5,7 @@ const { ipcRenderer } = (window as any).require('electron');
 
 const getBorgConfig = () => {
     return {
+        useWsl: localStorage.getItem('winborg_use_wsl') === 'true',
         path: localStorage.getItem('winborg_executable_path') || 'borg',
         passphrase: localStorage.getItem('winborg_passphrase') || '',
         disableHostCheck: localStorage.getItem('winborg_disable_host_check') === 'true'
@@ -13,12 +14,26 @@ const getBorgConfig = () => {
 
 const getEnvVars = (config: any) => {
     const env: any = {
-        BORG_PASSPHRASE: config.passphrase
+        BORG_PASSPHRASE: config.passphrase,
+        // Flags to allow remote access even if unknown
+        BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK: 'yes',
+        BORG_RELOCATED_REPO_ACCESS_IS_OK: 'yes',
     };
     
-    // If disabled, set BORG_RSH to ssh with strict checking disabled
-    if (config.disableHostCheck) {
-        env.BORG_RSH = 'ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null';
+    // If using WSL, we need to tell Windows to pass these variables into the WSL instance
+    if (config.useWsl) {
+        // /u flag for WSLENV means "translate path", but for simple strings (passwords), just passing the name is usually enough.
+        // However, standard env vars need to be listed in WSLENV to be visible inside WSL.
+        env.WSLENV = 'BORG_PASSPHRASE/u:BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK/u:BORG_RELOCATED_REPO_ACCESS_IS_OK/u';
+        
+        if (config.disableHostCheck) {
+           env.BORG_RSH = 'ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null';
+           env.WSLENV += ':BORG_RSH/u';
+        }
+    } else {
+        if (config.disableHostCheck) {
+            env.BORG_RSH = 'ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null';
+        }
     }
     
     return env;
@@ -48,6 +63,7 @@ export const borgService = {
       const result = await ipcRenderer.invoke('borg-spawn', { 
           args, 
           commandId, 
+          useWsl: config.useWsl,
           executablePath: config.path,
           envVars: getEnvVars(config)
       });
@@ -69,7 +85,9 @@ export const borgService = {
     const mountId = `mount-${Date.now()}`;
     const config = getBorgConfig();
     
-    // Note for Windows: WinFSP handles the drive mapping
+    // Construct args. 
+    // If WSL, mountPoint is a linux path (e.g. /mnt/wsl/borg)
+    // If Windows, mountPoint is a Drive Letter (e.g. Z:)
     const args = ['mount', `${repoUrl}::${archiveName}`, mountPoint];
     
     // Global log listener for mounts
@@ -83,6 +101,7 @@ export const borgService = {
     const result = await ipcRenderer.invoke('borg-mount', { 
         args, 
         mountId, 
+        useWsl: config.useWsl,
         executablePath: config.path,
         envVars: getEnvVars(config)
     });
@@ -99,6 +118,7 @@ export const borgService = {
     return await ipcRenderer.invoke('borg-unmount', { 
         mountId, 
         localPath, 
+        useWsl: config.useWsl,
         executablePath: config.path 
     });
   }

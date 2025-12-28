@@ -1,30 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import Button from '../components/Button';
-import { User, Save, Terminal, Shield, Check, Key, AlertTriangle, ExternalLink, Copy } from 'lucide-react';
+import { User, Save, Terminal, Shield, Check, Key, AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react';
 import { borgService } from '../services/borgService';
 
 const SettingsView: React.FC = () => {
+  const [useWsl, setUseWsl] = useState(false);
   const [borgPath, setBorgPath] = useState('borg');
   const [borgPassphrase, setBorgPassphrase] = useState('');
-  const [disableHostKeyCheck, setDisableHostKeyCheck] = useState(false);
   const [saved, setSaved] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 
   useEffect(() => {
+    const storedWsl = localStorage.getItem('winborg_use_wsl');
     const storedPath = localStorage.getItem('winborg_executable_path');
     const storedPass = localStorage.getItem('winborg_passphrase');
-    const storedHostCheck = localStorage.getItem('winborg_disable_host_check');
     
-    // Default to 'borg' if nothing is stored, as that's standard for Scoop/Choco
+    if (storedWsl) setUseWsl(storedWsl === 'true');
     if (storedPath) setBorgPath(storedPath);
     if (storedPass) setBorgPassphrase(storedPass);
-    if (storedHostCheck) setDisableHostKeyCheck(storedHostCheck === 'true');
   }, []);
 
   const handleSave = () => {
+    localStorage.setItem('winborg_use_wsl', String(useWsl));
     localStorage.setItem('winborg_executable_path', borgPath);
     localStorage.setItem('winborg_passphrase', borgPassphrase);
-    localStorage.setItem('winborg_disable_host_check', String(disableHostKeyCheck));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -34,10 +33,6 @@ const SettingsView: React.FC = () => {
     const success = await borgService.runCommand(['--version'], (log) => console.log(log));
     setTestStatus(success ? 'success' : 'error');
     setTimeout(() => setTestStatus('idle'), 3000);
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
   };
 
   return (
@@ -53,52 +48,62 @@ const SettingsView: React.FC = () => {
             <Terminal className="w-5 h-5 text-slate-600" /> System Integration
         </h2>
         
-        {/* Helper Box for Installation */}
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-5 mb-6 text-sm text-slate-700 space-y-4">
-            <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-500" /> 
-                How to get Borg on Windows 11
-            </h3>
-            <p className="text-slate-600">
-                The <code>borgbackup</code> package lives in the Scoop 'extras' bucket. You must add it first.
-            </p>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-white p-3 rounded border border-gray-200 shadow-sm">
-                    <div className="font-semibold text-slate-800 mb-2 flex items-center justify-between">
-                        Option A: Scoop (Recommended)
-                        <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Best</span>
-                    </div>
-                    <div className="bg-slate-900 rounded p-2 mb-2 font-mono text-xs">
-                        <div className="text-slate-500 mb-1 select-none"># 1. Add extras bucket</div>
-                        <code className="block text-yellow-400 mb-3 select-all">
-                            scoop bucket add extras
-                        </code>
-                        <div className="text-slate-500 mb-1 select-none"># 2. Install borg</div>
-                        <code className="block text-green-400 select-all">
-                            scoop install borgbackup
-                        </code>
-                    </div>
+        {/* Toggle WSL */}
+        <div className="flex items-center justify-between mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+            <div>
+                <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-900">Use Windows Subsystem for Linux (WSL)</span>
+                    <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">RECOMMENDED</span>
                 </div>
-
-                <div className="bg-white p-3 rounded border border-gray-200 shadow-sm">
-                    <div className="font-semibold text-slate-800 mb-2">Option B: Chocolatey</div>
-                    <code className="block bg-slate-900 text-yellow-400 p-2 rounded text-xs font-mono mb-2">
-                        choco install borgbackup
-                    </code>
-                    <p className="text-xs text-slate-500">Run PowerShell as Administrator.</p>
-                </div>
-            </div>
-
-            <div className="pt-2 border-t border-slate-200">
-                <p className="flex items-center gap-2 font-medium">
-                    <ExternalLink className="w-3 h-3" />
-                    Don't forget <a href="https://winfsp.dev/rel/" target="_blank" className="text-blue-600 underline hover:text-blue-800">WinFSP</a> for mounting support!
+                <p className="text-xs text-slate-500 max-w-md mt-1">
+                    Runs Borg inside your default Linux distribution instead of using Windows binaries. More stable and supports FUSE mounts better.
                 </p>
+            </div>
+            <div className="relative inline-block w-12 h-6 transition duration-200 ease-in-out">
+                <input 
+                    type="checkbox" 
+                    id="wsl-toggle" 
+                    className="peer sr-only"
+                    checked={useWsl}
+                    onChange={(e) => setUseWsl(e.target.checked)}
+                />
+                <label htmlFor="wsl-toggle" className="block w-12 h-6 bg-gray-200 rounded-full cursor-pointer peer-checked:bg-blue-600 transition-colors"></label>
+                <span className="absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform peer-checked:translate-x-6"></span>
             </div>
         </div>
 
+        {/* Dynamic Instructions */}
+        <div className="bg-blue-50 border border-blue-100 rounded-lg p-5 mb-6 text-sm text-slate-700 space-y-4">
+            <h3 className="font-semibold text-blue-900 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-blue-500" /> 
+                {useWsl ? 'WSL Setup Instructions' : 'Windows Native Setup'}
+            </h3>
+            
+            {useWsl ? (
+                <div className="space-y-3">
+                    <p>Ensure you have a default WSL distro installed (like Ubuntu) and Borg is installed inside it.</p>
+                    <div className="bg-slate-900 rounded p-3 font-mono text-xs">
+                        <div className="text-slate-500 mb-1 select-none"># Open your WSL terminal (Ubuntu/Debian) and run:</div>
+                        <code className="block text-green-400 select-all">
+                            sudo apt update && sudo apt install borgbackup
+                        </code>
+                    </div>
+                    <p className="text-xs text-blue-700">
+                        Note: For mounts to work in WSL, you might need to install `fuse` inside WSL as well.
+                    </p>
+                </div>
+            ) : (
+                <div className="space-y-3">
+                     <p>Use Scoop to install Borg on Windows directly.</p>
+                     <code className="block bg-slate-900 text-yellow-400 p-2 rounded text-xs font-mono">
+                        scoop bucket add extras && scoop install borgbackup
+                    </code>
+                </div>
+            )}
+        </div>
+
         <div className="space-y-6">
+            {!useWsl && (
             <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Borg Command / Path</label>
                 <div className="flex gap-2">
@@ -109,19 +114,9 @@ const SettingsView: React.FC = () => {
                         onChange={(e) => setBorgPath(e.target.value)}
                         placeholder="borg"
                     />
-                    <Button 
-                        variant="secondary" 
-                        onClick={handleTest}
-                        disabled={testStatus === 'loading'}
-                        className={testStatus === 'success' ? 'border-green-500 text-green-600 bg-green-50' : testStatus === 'error' ? 'border-red-500 text-red-600 bg-red-50' : ''}
-                    >
-                        {testStatus === 'loading' ? 'Testing...' : testStatus === 'success' ? 'Working!' : testStatus === 'error' ? 'Failed' : 'Test Command'}
-                    </Button>
                 </div>
-                <p className="text-xs text-slate-400 mt-1">
-                    If installed via Scoop/Choco, just type <code>borg</code>. Otherwise, provide the full path to <code>borg.exe</code>.
-                </p>
             </div>
+            )}
 
             <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Global Repository Passphrase</label>
@@ -136,33 +131,16 @@ const SettingsView: React.FC = () => {
                     />
                 </div>
             </div>
-        </div>
-      </div>
-      
-      {/* Connection Settings */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-            <Shield className="w-5 h-5 text-slate-600" /> SSH Connection
-        </h2>
-        
-        <div className="flex items-center justify-between">
+            
             <div>
-                <label className="text-sm font-medium text-slate-900">Disable Strict Host Key Checking</label>
-                <p className="text-xs text-slate-500 max-w-md mt-1">
-                    Prevents connection hangs by automatically accepting new SSH keys. 
-                    <span className="text-amber-600 ml-1">Warning: Less secure, but recommended for first-time connections in this app.</span>
-                </p>
-            </div>
-            <div className="relative inline-block w-12 h-6 transition duration-200 ease-in-out">
-                <input 
-                    type="checkbox" 
-                    id="host-check" 
-                    className="peer sr-only"
-                    checked={disableHostKeyCheck}
-                    onChange={(e) => setDisableHostKeyCheck(e.target.checked)}
-                />
-                <label htmlFor="host-check" className="block w-12 h-6 bg-gray-200 rounded-full cursor-pointer peer-checked:bg-blue-600 transition-colors"></label>
-                <span className="absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform peer-checked:translate-x-6"></span>
+                 <Button 
+                    variant="secondary" 
+                    onClick={handleTest}
+                    disabled={testStatus === 'loading'}
+                    className={`w-full ${testStatus === 'success' ? 'border-green-500 text-green-600 bg-green-50' : testStatus === 'error' ? 'border-red-500 text-red-600 bg-red-50' : ''}`}
+                >
+                    {testStatus === 'loading' ? 'Testing Connection...' : testStatus === 'success' ? 'Connection Successful!' : testStatus === 'error' ? 'Test Failed' : 'Test Borg Version'}
+                </Button>
             </div>
         </div>
       </div>
