@@ -125,7 +125,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                  <input 
                    type="text" 
                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm text-slate-900 font-mono transition-all shadow-sm"
-                   placeholder="ssh://user@hostname:22/path/to/repo"
+                   placeholder="ssh://user@example.com:22/path/to/repo"
                    value={repoForm.url}
                    onChange={e => setRepoForm({...repoForm, url: e.target.value})}
                  />
