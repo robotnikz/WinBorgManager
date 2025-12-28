@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { MountPoint, Repository, Archive } from '../types';
 import Button from '../components/Button';
-import { FolderOpen, XCircle, HardDrive, Terminal, Loader2, Copy } from 'lucide-react';
+import { FolderOpen, XCircle, HardDrive, Terminal, Loader2, Info } from 'lucide-react';
 
 interface MountsViewProps {
   mounts: MountPoint[];
@@ -17,25 +17,14 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
   const [isCreating, setIsCreating] = useState(false);
   const [selectedRepo, setSelectedRepo] = useState(repos[0]?.id || '');
   const [selectedArchive, setSelectedArchive] = useState(archives[0]?.name || '');
-  const [mountPath, setMountPath] = useState('');
   const [useWsl, setUseWsl] = useState(false);
   
-  const drives = "ZYXWVUTSRQPONMLKJIHGFEDCBA".split('').map(l => l + ':');
-
+  // Initialize state based on props and config
   useEffect(() => {
-     // Force re-read config
      const wslEnabled = localStorage.getItem('winborg_use_wsl') === 'true';
      setUseWsl(wslEnabled);
-     
-     // USER REQUEST: Immer in /mnt/wsl/winborg gemountet.
-     if (wslEnabled) {
-         // We append the archive name to keep mounts separate but inside the requested folder
-         const archivePart = selectedArchive ? selectedArchive : 'archive';
-         setMountPath(`/mnt/wsl/winborg/${archivePart}`);
-     } else {
-         setMountPath('Z:');
-     }
 
+     // Handle Preselection
      if (preselectedRepoId) {
         setIsCreating(true);
         setSelectedRepo(preselectedRepoId);
@@ -43,6 +32,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
         setSelectedRepo(repos[0].id);
      }
 
+     // Handle Archive Selection
      if (!selectedArchive && archives.length > 0) {
         setSelectedArchive(archives[0].name);
      } else if (archives.length > 0 && !archives.find(a => a.name === selectedArchive)) {
@@ -50,22 +40,27 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
      }
   }, [repos, archives, selectedRepo, selectedArchive, preselectedRepoId]);
 
-  // Update path when archive changes (if in WSL mode)
-  useEffect(() => {
-      const wslEnabled = localStorage.getItem('winborg_use_wsl') === 'true';
-      if (wslEnabled && selectedArchive) {
-          setMountPath(`/mnt/wsl/winborg/${selectedArchive}`);
-      }
-  }, [selectedArchive]);
-
   const handleMount = () => {
-    onMount(selectedRepo, selectedArchive, mountPath);
+    // FORCE PATH LOGIC:
+    // If WSL: /mnt/wsl/winborg/<ArchiveName>
+    // If Windows Native: Z: (Default fallback)
+    let finalPath = 'Z:';
+    
+    // Check config fresh
+    const isWslActive = localStorage.getItem('winborg_use_wsl') === 'true';
+    
+    if (isWslActive) {
+        finalPath = `/mnt/wsl/winborg/${selectedArchive}`;
+    }
+
+    onMount(selectedRepo, selectedArchive, finalPath);
     setIsCreating(false);
   };
 
   const handleOpenFolder = (path: string) => {
     try {
         const { ipcRenderer } = (window as any).require('electron');
+        // IPC handles the path translation for WSL
         ipcRenderer.send('open-path', path);
     } catch(e) {
         alert(`Path: ${path}`);
@@ -73,6 +68,9 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
   };
 
   const currentRepoStatus = repos.find(r => r.id === selectedRepo)?.status;
+  const targetPathPreview = useWsl 
+    ? `/mnt/wsl/winborg/${selectedArchive || '...'}` 
+    : 'Z: (Windows Native)';
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -93,11 +91,12 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
                 {useWsl && <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded">WSL Mode Active</span>}
            </div>
            
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+           {/* 2 Column Grid - No Drive Selection anymore */}
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
              <div>
                <label className="block text-xs font-medium text-slate-500 mb-1">Repository</label>
                <select 
-                 className="w-full p-2 bg-gray-50 border border-gray-200 rounded-md text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                 className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-md text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                  value={selectedRepo}
                  onChange={(e) => setSelectedRepo(e.target.value)}
                >
@@ -111,7 +110,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
                    {currentRepoStatus === 'connecting' && <span className="text-blue-500 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin"/> Loading...</span>}
                </label>
                <select 
-                 className="w-full p-2 bg-gray-50 border border-gray-200 rounded-md text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50"
+                 className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-md text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50"
                  value={selectedArchive}
                  onChange={(e) => setSelectedArchive(e.target.value)}
                  disabled={currentRepoStatus === 'connecting' || archives.length === 0}
@@ -123,31 +122,14 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
                  )}
                </select>
              </div>
+           </div>
 
-             <div>
-               <label className="block text-xs font-medium text-slate-500 mb-1">{useWsl ? 'Linux Mount Path' : 'Drive Letter'}</label>
-               {useWsl ? (
-                   <div className="flex gap-2">
-                       <input 
-                          type="text" 
-                          className="w-full p-2 bg-white border border-gray-200 rounded-md text-sm text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                          value={mountPath}
-                          onChange={(e) => setMountPath(e.target.value)}
-                          placeholder="/mnt/wsl/winborg/..."
-                          readOnly
-                       />
-                   </div>
-               ) : (
-                   <select 
-                     className="w-full p-2 bg-gray-50 border border-gray-200 rounded-md text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                     value={mountPath}
-                     onChange={(e) => setMountPath(e.target.value)}
-                   >
-                     {drives.map(l => <option key={l} value={l}>{l}</option>)}
-                   </select>
-               )}
-               {useWsl && <p className="text-[10px] text-slate-400 mt-1">Mounted in /mnt/wsl/winborg for Windows access.</p>}
-             </div>
+           {/* Info Banner showing the path */}
+           <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-800">
+               <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+               <div className="flex-1 font-mono text-xs break-all">
+                   Target Path: {targetPathPreview}
+               </div>
            </div>
 
            <div className="flex justify-end pt-2">
@@ -173,19 +155,19 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
           
           return (
             <div key={mount.id} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex items-center justify-between group">
-              <div className="flex items-center gap-4">
-                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+              <div className="flex items-center gap-4 min-w-0">
+                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex-shrink-0 flex items-center justify-center">
                     {isLinuxPath ? (
                         <Terminal className="text-blue-600 w-6 h-6" />
                     ) : (
                         <span className="font-bold text-blue-600 text-xl">{mount.localPath.replace(':', '')}</span>
                     )}
                  </div>
-                 <div>
-                    <h4 className="font-bold text-slate-800">{mount.archiveName}</h4>
+                 <div className="min-w-0">
+                    <h4 className="font-bold text-slate-800 truncate" title={mount.archiveName}>{mount.archiveName}</h4>
                     <p className="text-xs text-slate-500 flex items-center gap-2">
-                       <HardDrive className="w-3 h-3" />
-                       Mounted at <span className="font-medium text-slate-700 font-mono bg-gray-50 px-1 rounded truncate max-w-[200px]" title={mount.localPath}>{mount.localPath}</span>
+                       <HardDrive className="w-3 h-3 flex-shrink-0" />
+                       Mounted at <span className="font-medium text-slate-700 font-mono bg-gray-50 px-1 rounded truncate max-w-[250px]" title={mount.localPath}>{mount.localPath}</span>
                     </p>
                  </div>
               </div>
