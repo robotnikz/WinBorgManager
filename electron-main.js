@@ -206,6 +206,10 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
           // FUSE DETECTION
           if (text.includes('no FUSE support')) {
               fuseError = true;
+              const hint = `\n[WinBorg Hint] 🔴 FUSE Missing or Incomplete!\n` +
+                           `Borg needs python bindings for FUSE (llfuse/pyfuse3).\n` +
+                           `FIX: Run this in WSL: sudo apt install python3-llfuse python3-pyfuse3 libfuse2 -y`;
+              if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: hint });
           }
         });
 
