@@ -9,7 +9,7 @@ import ActivityView from './views/ActivityView';
 import ArchivesView from './views/ArchivesView';
 import TerminalModal from './components/TerminalModal';
 import FuseSetupModal from './components/FuseSetupModal';
-import { View, Repository, MountPoint, Archive } from './types';
+import { View, Repository, MountPoint, Archive, ActivityLogEntry } from './types';
 import { MOCK_REPOS, MOCK_ARCHIVES } from './constants';
 import { borgService } from './services/borgService';
 import { formatDate } from './utils/formatters';
@@ -17,7 +17,7 @@ import { formatDate } from './utils/formatters';
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
   
-  // LOGIC FIX: Persistence for Repos WITH SANITIZATION
+  // --- STATE: REPOS ---
   const [repos, setRepos] = useState<Repository[]>(() => {
     const isInitialized = localStorage.getItem('winborg_initialized');
     const savedRepos = localStorage.getItem('winborg_repos');
@@ -30,7 +30,7 @@ const App: React.FC = () => {
                     ...r,
                     // RESET Connection: SSH connections die on app close
                     status: 'disconnected', 
-                    // RESET Stuck Checks: If it was running during exit, it is dead now.
+                    // RESET Stuck Checks
                     checkStatus: r.checkStatus === 'running' ? 'idle' : r.checkStatus,
                     checkProgress: r.checkStatus === 'running' ? undefined : r.checkProgress,
                     activeCommandId: undefined
@@ -47,24 +47,40 @@ const App: React.FC = () => {
     }
   });
 
-  // LOGIC FIX: Persistence for Archives
+  // --- STATE: ARCHIVES ---
   const [archives, setArchives] = useState<Archive[]>(() => {
     const savedArchives = localStorage.getItem('winborg_archives');
     return savedArchives ? JSON.parse(savedArchives) : [];
   });
 
+  // --- STATE: MOUNTS ---
   const [mounts, setMounts] = useState<MountPoint[]>([]);
   const [preselectedRepoId, setPreselectedRepoId] = useState<string | null>(null);
-  
-  // Persist Repos when they change
-  useEffect(() => {
-    localStorage.setItem('winborg_repos', JSON.stringify(repos));
-  }, [repos]);
 
-  // Persist Archives when they change
-  useEffect(() => {
-    localStorage.setItem('winborg_archives', JSON.stringify(archives));
-  }, [archives]);
+  // --- STATE: ACTIVITY LOGS ---
+  const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>(() => {
+      const saved = localStorage.getItem('winborg_activity');
+      return saved ? JSON.parse(saved) : [];
+  });
+  
+  // Persist State
+  useEffect(() => { localStorage.setItem('winborg_repos', JSON.stringify(repos)); }, [repos]);
+  useEffect(() => { localStorage.setItem('winborg_archives', JSON.stringify(archives)); }, [archives]);
+  useEffect(() => { localStorage.setItem('winborg_activity', JSON.stringify(activityLogs)); }, [activityLogs]);
+
+  // Helper to add activity
+  const addActivity = (title: string, detail: string, status: 'success' | 'warning' | 'error' | 'info', cmd?: string) => {
+      const newLog: ActivityLogEntry = {
+          id: Math.random().toString(36).substr(2, 9),
+          title,
+          detail,
+          time: new Date().toISOString(),
+          status,
+          cmd
+      };
+      // Keep only last 100 logs to prevent lag
+      setActivityLogs(prev => [newLog, ...prev].slice(0, 100));
+  };
 
   // NEW: Listen for unexpected mount crashes to keep UI in sync
   useEffect(() => {
@@ -73,10 +89,13 @@ const App: React.FC = () => {
         const handleMountExited = (_: any, { mountId, code }: { mountId: string, code: number }) => {
             console.log(`Mount ${mountId} exited with code ${code}`);
             // Remove from UI
-            setMounts(prev => prev.filter(m => m.id !== mountId));
-            
-            // Note: We don't show a modal here because the terminal log usually explains it,
-            // but cleaning up the ghost entry is crucial.
+            setMounts(prev => {
+                const mount = prev.find(m => m.id === mountId);
+                if (mount) {
+                     addActivity('Mount Crashed', `Mount point ${mount.localPath} exited unexpectedly (Code ${code})`, 'error');
+                }
+                return prev.filter(m => m.id !== mountId);
+            });
         };
 
         ipcRenderer.on('mount-exited', handleMountExited);
@@ -111,8 +130,6 @@ const App: React.FC = () => {
 
     let fullOutput = '';
     const success = await borgService.runCommand(args, (log) => {
-        // IMPORTANT: Do NOT trim aggressively on every chunk, it merges words/json tokens incorrectly.
-        // Just append raw log to buffer for parsing, but trim for display.
         setTerminalLogs(prev => [...prev, log.trimEnd()]); 
         fullOutput += log;
     }, overrides);
@@ -134,6 +151,9 @@ const App: React.FC = () => {
     setTerminalTitle(`Mounting ${archiveName}`);
     setTerminalLogs([`Requesting mount of ${repo.url}::${archiveName} to ${path}...`]);
     setIsProcessing(true);
+    
+    // Log Start
+    addActivity('Mount Requested', `Mounting ${archiveName} to ${path}`, 'info');
 
     const result = await borgService.mount(repo.url, archiveName, path, (log) => {
          setTerminalLogs(prev => [...prev, log.trim()]);
@@ -142,6 +162,7 @@ const App: React.FC = () => {
     setIsProcessing(false);
 
     if (result.success) {
+        addActivity('Mount Successful', `Archive ${archiveName} mounted at ${path}`, 'success');
         setTerminalLogs(prev => [...prev, "Mount process started successfully."]);
         const newMount: MountPoint = {
           id: result.mountId || Date.now().toString(),
@@ -154,6 +175,7 @@ const App: React.FC = () => {
         setCurrentView(View.MOUNTS);
         setTimeout(() => setIsTerminalOpen(false), 1000);
     } else {
+        addActivity('Mount Failed', `Failed to mount ${archiveName}: ${result.error || 'Unknown error'}`, 'error');
         setTerminalLogs(prev => [...prev, "Failed to mount."]);
         
         // Check for specific FUSE error
@@ -176,6 +198,7 @@ const App: React.FC = () => {
 
     await borgService.unmount(mount.id, mount.localPath);
     
+    addActivity('Unmount', `Unmounted ${mount.localPath}`, 'success');
     setMounts(prev => prev.filter(m => m.id !== id));
     setIsProcessing(false);
     setTimeout(() => setIsTerminalOpen(false), 500);
@@ -207,6 +230,9 @@ const App: React.FC = () => {
          setArchives(prev => prev.map(a => 
              a.name === archiveName ? { ...a, size: stats.size, duration: stats.duration } : a
          ));
+         addActivity('Archive Stats Updated', `Fetched stats for ${archiveName} (${stats.size})`, 'success', `borg info ${repo.url}::${archiveName}`);
+     } else {
+         addActivity('Stats Fetch Failed', `Could not get info for ${archiveName}`, 'warning');
      }
   };
 
@@ -237,6 +263,7 @@ const App: React.FC = () => {
                 })).reverse();
 
                 setArchives(newArchives);
+                addActivity('Connection Successful', `Connected to ${repo.name} and retrieved ${newArchives.length} archives.`, 'success', `borg list ${repo.url}`);
 
                 // AUTO-FETCH LATEST: Fetch info for the first archive automatically
                 if (newArchives.length > 0) {
@@ -286,6 +313,7 @@ const App: React.FC = () => {
 
             } catch (e) {
                 console.error("Failed to parse Borg JSON", e);
+                addActivity('Connection Failed', `Failed to parse response from ${repo.name}`, 'error');
                 setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, status: 'error' } : r));
             }
         },
@@ -317,12 +345,11 @@ const App: React.FC = () => {
           activeCommandId: commandId
       } : r));
       
+      addActivity('Integrity Check Started', `Started deep consistency check on ${repo.name}`, 'info', `borg check --progress ${repo.url}`);
       console.log(`Starting background check for ${repo.name}... (ID: ${commandId})`);
 
       const progressCallback = (log: string) => {
          // Attempt to parse percentage from Borg output
-         // Example chunks: "12.5% ..." or multiple in one line like "1%\r2%\r3%"
-         // We find ALL matches and take the last one to be most current
          const matches = [...log.matchAll(/(\d+\.\d+|\d+)%/g)];
          
          if (matches.length > 0) {
@@ -347,9 +374,7 @@ const App: React.FC = () => {
           }
       );
 
-      // 3. Update Status (Check if it was aborted vs just failed)
-      // If activeCommandId is missing in current state, it might have been cleared by abort,
-      // but here we are in the closure of the finished promise.
+      // 3. Update Status
       const timestamp = new Date().toLocaleString();
       
       setRepos(prev => {
@@ -359,6 +384,12 @@ const App: React.FC = () => {
               return prev; // Don't overwrite aborted status
           }
           
+          if (success) {
+              addActivity('Integrity Check Passed', `Repository ${repo.name} verified successfully.`, 'success');
+          } else {
+              addActivity('Integrity Check Failed', `Consistency check failed for ${repo.name}. See terminal output.`, 'error');
+          }
+
           return prev.map(r => r.id === repo.id ? { 
             ...r, 
             checkStatus: success ? 'ok' : 'error',
@@ -377,6 +408,8 @@ const App: React.FC = () => {
           checkProgress: undefined,
           activeCommandId: undefined
       } : r));
+      
+      addActivity('Integrity Check Aborted', `User manually cancelled check for ${repo.name}`, 'warning');
 
       if (repo.activeCommandId) {
           console.log(`Aborting check for ${repo.name} (ID: ${repo.activeCommandId})`);
@@ -397,6 +430,8 @@ const App: React.FC = () => {
       setTerminalTitle(`Unlocking Repo: ${repo.name}`);
       setTerminalLogs([]);
       setIsProcessing(true);
+      
+      addActivity('Force Unlock Started', `Attempting to break lock on ${repo.name}`, 'warning');
 
       // Step 1: Standard Break Lock
       setTerminalLogs(prev => [...prev, "--- Step 1: Running borg break-lock ---"]);
@@ -417,9 +452,11 @@ const App: React.FC = () => {
       setIsProcessing(false);
       
       if(deleteSuccess) {
+          addActivity('Unlock Successful', `Lock files removed for ${repo.name}`, 'success');
           setTerminalLogs(prev => [...prev, " ", "✅ Lock files deleted successfully."]);
           setTimeout(() => setIsTerminalOpen(false), 2000);
       } else {
+          addActivity('Unlock Failed', `Could not delete lock files for ${repo.name}`, 'error');
           setTerminalLogs(prev => [...prev, " ", "❌ Failed to delete lock files. Check SSH permissions."]);
       }
   };
@@ -465,6 +502,7 @@ const App: React.FC = () => {
        lastCheckTime: 'Never'
     };
     setRepos(prev => [...prev, newRepo]);
+    addActivity('Repository Added', `Added configuration for ${repoData.name}`, 'info');
     
     // Auto try to connect using the provided credentials
     handleConnect(newRepo);
@@ -486,11 +524,13 @@ const App: React.FC = () => {
          }
          return r;
      }));
+     addActivity('Repository Edited', `Updated configuration for ${repoData.name}`, 'info');
   };
 
   const handleDeleteRepo = (repoId: string) => {
       if (window.confirm("Are you sure you want to remove this repository configuration?")) {
           setRepos(prev => prev.filter(r => r.id !== repoId));
+          addActivity('Repository Deleted', `Removed repository configuration`, 'warning');
       }
   };
 
@@ -538,7 +578,12 @@ const App: React.FC = () => {
       case View.SETTINGS:
         return <SettingsView />;
       case View.ACTIVITY:
-        return <ActivityView />;
+        return (
+            <ActivityView 
+                logs={activityLogs} 
+                onClearLogs={() => setActivityLogs([])} 
+            />
+        );
       case View.DASHBOARD:
       default:
         return (

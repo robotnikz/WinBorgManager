@@ -46,3 +46,12 @@ export interface MountPoint {
   status: 'mounted' | 'unmounting' | 'error';
   processId?: number;
 }
+
+export interface ActivityLogEntry {
+  id: string;
+  title: string;
+  detail: string;
+  time: string; // ISO string
+  status: 'success' | 'warning' | 'error' | 'info';
+  cmd?: string;
+}
