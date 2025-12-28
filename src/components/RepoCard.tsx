@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Repository } from '../types';
-import { Server, Shield, Clock, HardDrive, Trash2, Loader2, Edit2, ShieldCheck, Unlock } from 'lucide-react';
+import { Server, Shield, Clock, HardDrive, Trash2, Loader2, Edit2, ShieldCheck, Unlock, Lock } from 'lucide-react';
 
 interface RepoCardProps {
   repo: Repository;
@@ -36,6 +36,14 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
         {/* Right: Unified Control Pill - Added shrink-0 to prevent compression */}
         <div className="flex items-center bg-white border border-gray-200 rounded-lg p-1 shadow-sm gap-1 shrink-0 ml-auto">
             
+            {/* Locked Indicator */}
+            {repo.isLocked && (
+                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-200 mr-1" title="Repo is Locked (lock.roster exists)">
+                     <Lock className="w-3.5 h-3.5" />
+                     <span>Locked</span>
+                 </div>
+            )}
+
             {/* Status Section */}
             <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
               repo.status === 'connected' ? 'bg-green-50 text-green-700' : 

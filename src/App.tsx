@@ -92,6 +92,14 @@ const App: React.FC = () => {
       if(isLocked) console.log(`[Lock Check] Repo ${repo.name} is LOCKED.`);
   };
 
+  // INITIAL LOAD: Check locks for all repos
+  useEffect(() => {
+      repos.forEach(repo => {
+          checkRepoLock(repo);
+      });
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount using initial repos state
+
   // NEW: Listen for unexpected mount crashes to keep UI in sync
   useEffect(() => {
     try {
