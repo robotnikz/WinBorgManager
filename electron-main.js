@@ -168,6 +168,8 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
 ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, envVars }) => {
   return new Promise((resolve) => {
     let bin, finalArgs;
+    // Track fuse error
+    let fuseError = false;
     
     if (useWsl) {
         const mountPoint = args[args.length - 1]; 
@@ -203,12 +205,7 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
           
           // FUSE DETECTION
           if (text.includes('no FUSE support')) {
-              const hint = `\n[WinBorg Hint] 🔴 FUSE Missing in WSL!\n` +
-                           `Borg needs FUSE to mount archives as virtual drives.\n` +
-                           `Run these commands in your WSL terminal (Ubuntu):\n` +
-                           `1. sudo apt update && sudo apt install fuse -y\n` +
-                           `2. sudo chmod 666 /dev/fuse`;
-              if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: hint });
+              fuseError = true;
           }
         });
 
@@ -218,11 +215,16 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
           if (mainWindow) mainWindow.webContents.send('mount-exited', { mountId, code });
         });
 
+        // Wait to see if process stays alive
         setTimeout(() => {
             if (activeMounts.has(mountId)) {
                 resolve({ success: true, pid: child.pid });
             } else {
-                resolve({ success: false });
+                // If process died, check if it was due to FUSE
+                resolve({ 
+                    success: false, 
+                    error: fuseError ? 'FUSE_MISSING' : 'PROCESS_EXITED' 
+                });
             }
         }, 2000);
     } catch (e) {

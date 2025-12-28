@@ -93,7 +93,7 @@ export const borgService = {
     archiveName: string, 
     mountPoint: string,
     onLog: (text: string) => void
-  ): Promise<{ success: boolean; mountId?: string }> => {
+  ): Promise<{ success: boolean; mountId?: string; error?: string }> => {
     const mountId = `mount-${Date.now()}`;
     const config = getBorgConfig();
     
@@ -121,7 +121,7 @@ export const borgService = {
     if (result.success) {
         return { success: true, mountId };
     } else {
-        return { success: false };
+        return { success: false, error: result.error };
     }
   },
 

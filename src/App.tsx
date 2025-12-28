@@ -5,6 +5,7 @@ import RepositoriesView from './views/RepositoriesView';
 import MountsView from './views/MountsView';
 import SettingsView from './views/SettingsView';
 import TerminalModal from './components/TerminalModal';
+import FuseSetupModal from './components/FuseSetupModal';
 import { View, Repository, MountPoint, Archive } from './types';
 import { MOCK_REPOS, MOCK_ARCHIVES } from './constants';
 import { HardDrive } from 'lucide-react';
@@ -39,6 +40,9 @@ const App: React.FC = () => {
   const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
   const [terminalTitle, setTerminalTitle] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // FUSE Help Modal State
+  const [showFuseHelp, setShowFuseHelp] = useState(false);
 
   // Helper to run commands with terminal feedback
   const runCommand = async (
@@ -98,6 +102,14 @@ const App: React.FC = () => {
         setTimeout(() => setIsTerminalOpen(false), 1000);
     } else {
         setTerminalLogs(prev => [...prev, "Failed to mount."]);
+        
+        // Check for specific FUSE error
+        if (result.error === 'FUSE_MISSING') {
+            setTimeout(() => {
+                setIsTerminalOpen(false); // Close terminal to show helpful modal
+                setShowFuseHelp(true);
+            }, 500);
+        }
     }
   };
 
@@ -303,6 +315,11 @@ const App: React.FC = () => {
             logs={terminalLogs}
             onClose={() => setIsTerminalOpen(false)}
             isProcessing={isProcessing}
+          />
+          
+          <FuseSetupModal 
+            isOpen={showFuseHelp} 
+            onClose={() => setShowFuseHelp(false)} 
           />
 
           <main className="flex-1 flex flex-col h-full overflow-hidden relative">
