@@ -10,8 +10,8 @@ interface FuseSetupModalProps {
 const FuseSetupModal: React.FC<FuseSetupModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
-  // Updated command including python bindings and libfuse2 which are crucial for Borg
-  const command = "sudo apt update && sudo apt install fuse libfuse2 python3-llfuse python3-pyfuse3 -y && sudo chmod 666 /dev/fuse";
+  // Updated command: Added 'fuse3' specifically as required by fusermount3 error
+  const command = "sudo apt update && sudo apt install fuse3 libfuse2 python3-llfuse python3-pyfuse3 -y && sudo chmod 666 /dev/fuse";
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -24,7 +24,7 @@ const FuseSetupModal: React.FC<FuseSetupModalProps> = ({ isOpen, onClose }) => {
                     <div>
                         <h3 className="text-lg font-bold text-slate-900">WSL Configuration Required</h3>
                         <p className="text-sm text-slate-600 mt-2 leading-relaxed">
-                            Borg requires <strong>FUSE bindings</strong> to mount archives. Your current installation is missing the Python libraries needed for this.
+                            Borg requires <strong>FUSE 3</strong> to mount archives on this system. The error <code>fusermount3: not found</code> indicates this is missing.
                         </p>
                     </div>
                 </div>

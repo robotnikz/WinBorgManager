@@ -102,8 +102,8 @@ const SettingsView: React.FC = () => {
                     <p className="text-xs">WinBorg will execute commands via <code>wsl --exec borg ...</code>.</p>
                     <p className="text-xs">Ensure Borg and FUSE bindings are installed in your default distro:</p>
                     <div className="bg-slate-900 rounded p-3 font-mono text-xs">
-                        <code className="block text-green-400 select-all cursor-pointer" onClick={() => navigator.clipboard.writeText('sudo apt update && sudo apt install borgbackup fuse libfuse2 python3-llfuse python3-pyfuse3 -y && sudo chmod 666 /dev/fuse')}>
-                            sudo apt update && sudo apt install borgbackup fuse libfuse2 python3-llfuse python3-pyfuse3 -y
+                        <code className="block text-green-400 select-all cursor-pointer" onClick={() => navigator.clipboard.writeText('sudo apt update && sudo apt install borgbackup fuse3 libfuse2 python3-llfuse python3-pyfuse3 -y && sudo chmod 666 /dev/fuse')}>
+                            sudo apt update && sudo apt install borgbackup fuse3 libfuse2 python3-llfuse python3-pyfuse3 -y
                         </code>
                         <div className="text-slate-500 text-[10px] mt-1 text-right">(Click to copy)</div>
                     </div>

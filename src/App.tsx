@@ -36,6 +36,28 @@ const App: React.FC = () => {
     localStorage.setItem('winborg_repos', JSON.stringify(repos));
   }, [repos]);
 
+  // NEW: Listen for unexpected mount crashes to keep UI in sync
+  useEffect(() => {
+    try {
+        const { ipcRenderer } = (window as any).require('electron');
+        const handleMountExited = (_: any, { mountId, code }: { mountId: string, code: number }) => {
+            console.log(`Mount ${mountId} exited with code ${code}`);
+            // Remove from UI
+            setMounts(prev => prev.filter(m => m.id !== mountId));
+            
+            // Note: We don't show a modal here because the terminal log usually explains it,
+            // but cleaning up the ghost entry is crucial.
+        };
+
+        ipcRenderer.on('mount-exited', handleMountExited);
+        return () => {
+            ipcRenderer.removeListener('mount-exited', handleMountExited);
+        };
+    } catch (e) {
+        console.warn("Could not attach mount-exited listener");
+    }
+  }, []);
+
   // Terminal State
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
   const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
