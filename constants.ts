@@ -4,7 +4,7 @@ export const MOCK_REPOS: Repository[] = [
   {
     id: '1',
     name: 'Hetzner StorageBox',
-    url: 'ssh://u2342@u2342.your-storagebox.de:23/./backups/main',
+    url: 'ssh://u2342@u2342.your-storagebox.de:23/backups/main',
     lastBackup: '2 hours ago',
     encryption: 'repokey',
     status: 'connected',
