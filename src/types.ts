@@ -24,6 +24,7 @@ export interface Repository {
   // Integrity Check State
   checkStatus?: 'idle' | 'running' | 'ok' | 'error' | 'aborted';
   checkProgress?: number; // 0-100
+  checkStartTime?: number; // Timestamp in ms
   lastCheckTime?: string;
   
   // To allow aborting

@@ -1,5 +1,5 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Repository, MountPoint, View, ActivityLogEntry } from '../types';
 import { 
   ShieldCheck, 
@@ -14,10 +14,11 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
-  XSquare
+  XSquare,
+  Timer
 } from 'lucide-react';
 import Button from '../components/Button';
-import { parseSizeString, formatBytes, formatDate } from '../utils/formatters';
+import { parseSizeString, formatBytes, formatDate, formatDuration } from '../utils/formatters';
 
 interface DashboardViewProps {
   repos: Repository[];
@@ -32,6 +33,16 @@ interface DashboardViewProps {
 
 const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, activityLogs, onQuickMount, onConnect, onCheck, onChangeView, onAbortCheck }) => {
   
+  // Force update to recalculate ETA every second if needed
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+      const hasRunningCheck = repos.some(r => r.checkStatus === 'running');
+      if (hasRunningCheck) {
+          const interval = setInterval(() => setNow(Date.now()), 1000);
+          return () => clearInterval(interval);
+      }
+  }, [repos]);
+
   // Calculate Statistics
   const stats = useMemo(() => {
     const totalRepos = repos.length;
@@ -84,6 +95,20 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, activityLo
           if (hours < 24) return `${hours}h ago`;
           return formatDate(iso);
       } catch { return iso; }
+  };
+  
+  // Calculate ETA for specific repo
+  const getEta = (repo: Repository) => {
+      if (repo.checkStatus !== 'running' || !repo.checkStartTime || !repo.checkProgress || repo.checkProgress <= 0.5) return null;
+      
+      const elapsedMs = now - repo.checkStartTime;
+      if (elapsedMs < 2000) return "Calculating..."; // Buffer for initial calculation
+
+      const timePerPercent = elapsedMs / repo.checkProgress;
+      const remainingPercent = 100 - repo.checkProgress;
+      const remainingMs = timePerPercent * remainingPercent;
+      
+      return formatDuration(remainingMs / 1000) + ' remaining';
   };
 
   return (
@@ -201,83 +226,91 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, activityLo
                             No repositories configured.
                         </div>
                     ) : (
-                        repos.map(repo => (
-                            <div key={repo.id} className="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                                <div className="flex items-center gap-4 flex-1">
-                                    <div className={`w-2 h-2 rounded-full ${repo.status === 'connected' ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                                    <div className="flex-1">
-                                        <div className="font-medium text-slate-800">{repo.name}</div>
-                                        <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
-                                            <span className="truncate max-w-[150px]">{repo.url}</span>
-                                            
-                                            {/* Integrity Status Badge */}
-                                            {repo.checkStatus === 'running' && (
-                                                <div className="flex flex-col gap-1 ml-2 w-32">
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-[10px] text-blue-600 font-medium flex items-center gap-1">
-                                                            <Loader2 className="w-3 h-3 animate-spin" /> 
-                                                            Checking... {typeof repo.checkProgress === 'number' ? `${Math.round(repo.checkProgress)}%` : '0%'}
-                                                        </span>
+                        repos.map(repo => {
+                            const eta = getEta(repo);
+                            return (
+                                <div key={repo.id} className="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                                    <div className="flex items-center gap-4 flex-1">
+                                        <div className={`w-2 h-2 rounded-full ${repo.status === 'connected' ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                                        <div className="flex-1">
+                                            <div className="font-medium text-slate-800">{repo.name}</div>
+                                            <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
+                                                <span className="truncate max-w-[150px]">{repo.url}</span>
+                                                
+                                                {/* Integrity Status Badge */}
+                                                {repo.checkStatus === 'running' && (
+                                                    <div className="flex flex-col gap-1.5 ml-2 w-48">
+                                                        <div className="flex justify-between items-end">
+                                                            <span className="text-[10px] text-blue-600 font-medium flex items-center gap-1">
+                                                                <Loader2 className="w-3 h-3 animate-spin" /> 
+                                                                {typeof repo.checkProgress === 'number' ? `${Math.round(repo.checkProgress)}%` : '0%'}
+                                                            </span>
+                                                            {eta && (
+                                                                <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
+                                                                    <Timer className="w-3 h-3" /> {eta}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className="h-1.5 w-full bg-blue-100 rounded-full overflow-hidden">
+                                                            <div 
+                                                                className="h-full bg-blue-500 rounded-full transition-all duration-300" 
+                                                                style={{ width: `${repo.checkProgress || 0}%` }}
+                                                            ></div>
+                                                        </div>
                                                     </div>
-                                                    <div className="h-1.5 w-full bg-blue-100 rounded-full overflow-hidden">
-                                                        <div 
-                                                            className="h-full bg-blue-500 rounded-full transition-all duration-300" 
-                                                            style={{ width: `${repo.checkProgress || 0}%` }}
-                                                        ></div>
-                                                    </div>
-                                                </div>
-                                            )}
-                                            {repo.checkStatus === 'ok' && (
-                                                <span className="flex items-center gap-1 text-green-600 bg-green-50 px-1.5 py-0.5 rounded ml-2" title={`Verified: ${repo.lastCheckTime}`}>
-                                                    <CheckCircle2 className="w-3 h-3" /> Verified
-                                                </span>
-                                            )}
-                                            {repo.checkStatus === 'error' && (
-                                                <span className="flex items-center gap-1 text-red-600 bg-red-50 px-1.5 py-0.5 rounded ml-2">
-                                                    <XCircle className="w-3 h-3" /> Check Failed
-                                                </span>
-                                            )}
-                                             {repo.checkStatus === 'aborted' && (
-                                                <span className="flex items-center gap-1 text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded ml-2">
-                                                    <XSquare className="w-3 h-3" /> Aborted
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                    <div className="text-right mr-2 hidden sm:block">
-                                        <div className="text-[10px] uppercase font-bold text-slate-400">Last Backup</div>
-                                        <div className="text-xs font-medium text-slate-700 flex items-center justify-end gap-1">
-                                            <Clock className="w-3 h-3" /> {repo.lastBackup}
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        {repo.checkStatus === 'running' ? (
-                                            <Button size="sm" variant="danger" onClick={() => onAbortCheck?.(repo)}>
-                                                Abort
-                                            </Button>
-                                        ) : (
-                                            <>
-                                                <Button 
-                                                    size="sm" 
-                                                    variant="secondary"
-                                                    onClick={() => onConnect(repo)}
-                                                    disabled={repo.status === 'connected'}
-                                                >
-                                                    {repo.status === 'connected' ? 'Connected' : 'Connect'}
-                                                </Button>
-                                                {repo.status === 'connected' && (
-                                                    <Button size="sm" onClick={() => onQuickMount(repo)}>
-                                                        Mount
-                                                    </Button>
                                                 )}
-                                            </>
-                                        )}
+                                                {repo.checkStatus === 'ok' && (
+                                                    <span className="flex items-center gap-1 text-green-600 bg-green-50 px-1.5 py-0.5 rounded ml-2" title={`Verified: ${repo.lastCheckTime}`}>
+                                                        <CheckCircle2 className="w-3 h-3" /> Verified
+                                                    </span>
+                                                )}
+                                                {repo.checkStatus === 'error' && (
+                                                    <span className="flex items-center gap-1 text-red-600 bg-red-50 px-1.5 py-0.5 rounded ml-2">
+                                                        <XCircle className="w-3 h-3" /> Check Failed
+                                                    </span>
+                                                )}
+                                                 {repo.checkStatus === 'aborted' && (
+                                                    <span className="flex items-center gap-1 text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded ml-2">
+                                                        <XSquare className="w-3 h-3" /> Aborted
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                        <div className="text-right mr-2 hidden sm:block">
+                                            <div className="text-[10px] uppercase font-bold text-slate-400">Last Backup</div>
+                                            <div className="text-xs font-medium text-slate-700 flex items-center justify-end gap-1">
+                                                <Clock className="w-3 h-3" /> {repo.lastBackup}
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            {repo.checkStatus === 'running' ? (
+                                                <Button size="sm" variant="danger" onClick={() => onAbortCheck?.(repo)}>
+                                                    Abort
+                                                </Button>
+                                            ) : (
+                                                <>
+                                                    <Button 
+                                                        size="sm" 
+                                                        variant="secondary"
+                                                        onClick={() => onConnect(repo)}
+                                                        disabled={repo.status === 'connected'}
+                                                    >
+                                                        {repo.status === 'connected' ? 'Connected' : 'Connect'}
+                                                    </Button>
+                                                    {repo.status === 'connected' && (
+                                                        <Button size="sm" onClick={() => onQuickMount(repo)}>
+                                                            Mount
+                                                        </Button>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
             </div>

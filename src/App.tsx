@@ -310,7 +310,11 @@ const App: React.FC = () => {
   const handleCheckIntegrity = async (repo: Repository) => {
       const commandId = `check-${repo.id}-${Date.now()}`;
       setRepos(prev => prev.map(r => r.id === repo.id ? { 
-          ...r, checkStatus: 'running', checkProgress: 0, activeCommandId: commandId
+          ...r, 
+          checkStatus: 'running', 
+          checkProgress: 0, 
+          checkStartTime: Date.now(), // Store start time for ETA calculation
+          activeCommandId: commandId
       } : r));
       
       addActivity('Integrity Check Started', `Started check on ${repo.name}`, 'info');
@@ -337,15 +341,19 @@ const App: React.FC = () => {
           else addActivity('Integrity Check Failed', `Check failed for ${repo.name}.`, 'error');
 
           return prev.map(r => r.id === repo.id ? { 
-            ...r, checkStatus: success ? 'ok' : 'error', checkProgress: success ? 100 : undefined,
-            lastCheckTime: new Date().toLocaleString(), activeCommandId: undefined
+            ...r, 
+            checkStatus: success ? 'ok' : 'error', 
+            checkProgress: success ? 100 : undefined,
+            checkStartTime: undefined, // Clear start time
+            lastCheckTime: new Date().toLocaleString(), 
+            activeCommandId: undefined
           } : r);
       });
   };
 
   const handleAbortCheck = async (repo: Repository) => {
       setRepos(prev => prev.map(r => r.id === repo.id ? {
-          ...r, checkStatus: 'aborted', checkProgress: undefined, activeCommandId: undefined
+          ...r, checkStatus: 'aborted', checkProgress: undefined, checkStartTime: undefined, activeCommandId: undefined
       } : r));
       addActivity('Integrity Check Aborted', `Cancelled check for ${repo.name}`, 'warning');
       if (repo.activeCommandId) await borgService.stopCommand(repo.activeCommandId);
