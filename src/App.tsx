@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import TitleBar from './components/TitleBar';
@@ -123,7 +124,8 @@ const App: React.FC = () => {
       onSuccess?: (output: string) => void,
       overrides?: { passphrase?: string, disableHostCheck?: boolean }
   ) => {
-    setIsTerminalOpen(true);
+    // SILENT MODE: Do not open terminal by default
+    // setIsTerminalOpen(true); 
     setTerminalTitle(title);
     setTerminalLogs([]);
     setIsProcessing(true);
@@ -137,9 +139,11 @@ const App: React.FC = () => {
     setIsProcessing(false);
     if (success) {
         if (onSuccess) onSuccess(fullOutput);
-        setTimeout(() => setIsTerminalOpen(false), 1000);
+        // No need to close terminal if it wasn't open
     } else {
         setTerminalLogs(prev => [...prev, "Command failed. Please check the error above."]);
+        // ERROR: Open terminal so user sees what happened
+        setIsTerminalOpen(true);
     }
   };
 
@@ -147,7 +151,7 @@ const App: React.FC = () => {
     const repo = repos.find(r => r.id === repoId);
     if (!repo) return;
 
-    setIsTerminalOpen(true);
+    // SILENT MODE: Do not open terminal
     setTerminalTitle(`Mounting ${archiveName}`);
     setTerminalLogs([`Requesting mount of ${repo.url}::${archiveName} to ${path}...`]);
     setIsProcessing(true);
@@ -183,11 +187,13 @@ const App: React.FC = () => {
         };
         setMounts(prev => [...prev, newMount]);
         setCurrentView(View.MOUNTS);
-        setTimeout(() => setIsTerminalOpen(false), 1000);
     } else {
         addActivity('Mount Failed', `Failed to mount ${archiveName}: ${result.error || 'Unknown error'}`, 'error');
         setTerminalLogs(prev => [...prev, "Failed to mount."]);
         
+        // Open terminal on error so they can debug
+        setIsTerminalOpen(true);
+
         // Check for specific FUSE error
         if (result.error === 'FUSE_MISSING') {
             setTimeout(() => {
@@ -202,7 +208,7 @@ const App: React.FC = () => {
     const mount = mounts.find(m => m.id === id);
     if (!mount) return;
 
-    setIsTerminalOpen(true);
+    // SILENT MODE
     setTerminalTitle(`Unmounting ${mount.localPath}`);
     setIsProcessing(true);
 
@@ -211,7 +217,6 @@ const App: React.FC = () => {
     addActivity('Unmount', `Unmounted ${mount.localPath}`, 'success');
     setMounts(prev => prev.filter(m => m.id !== id));
     setIsProcessing(false);
-    setTimeout(() => setIsTerminalOpen(false), 500);
   };
 
   // Helper to robustly extract JSON from mixed output (stdout + stderr)
@@ -436,7 +441,7 @@ const App: React.FC = () => {
           return;
       }
 
-      setIsTerminalOpen(true);
+      // SILENT MODE: No terminal unless error
       setTerminalTitle(`Unlocking Repo: ${repo.name}`);
       setTerminalLogs([]);
       setIsProcessing(true);
@@ -464,10 +469,11 @@ const App: React.FC = () => {
       if(deleteSuccess) {
           addActivity('Unlock Successful', `Lock files removed for ${repo.name}`, 'success');
           setTerminalLogs(prev => [...prev, " ", "✅ Lock files deleted successfully."]);
-          setTimeout(() => setIsTerminalOpen(false), 2000);
       } else {
           addActivity('Unlock Failed', `Could not delete lock files for ${repo.name}`, 'error');
           setTerminalLogs(prev => [...prev, " ", "❌ Failed to delete lock files. Check SSH permissions."]);
+          // ERROR: Show terminal
+          setIsTerminalOpen(true);
       }
   };
 
