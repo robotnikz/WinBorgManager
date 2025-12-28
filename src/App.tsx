@@ -263,10 +263,17 @@ const App: React.FC = () => {
    * Run Integrity Check in BACKGROUND (Non-Blocking) with Progress
    */
   const handleCheckIntegrity = async (repo: Repository) => {
-      // 1. Set Status to Running with 0 progress
-      setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, checkStatus: 'running', checkProgress: 0 } : r));
+      // 1. Generate ID and Set Status to Running with 0 progress
+      const commandId = `check-${repo.id}-${Date.now()}`;
       
-      console.log(`Starting background check for ${repo.name}...`);
+      setRepos(prev => prev.map(r => r.id === repo.id ? { 
+          ...r, 
+          checkStatus: 'running', 
+          checkProgress: 0,
+          activeCommandId: commandId
+      } : r));
+      
+      console.log(`Starting background check for ${repo.name}... (ID: ${commandId})`);
 
       const progressCallback = (log: string) => {
          // Attempt to parse percentage from Borg output
@@ -282,21 +289,54 @@ const App: React.FC = () => {
          }
       };
 
-      // 2. Run command using --progress
+      // 2. Run command using --progress AND passing commandId
       const success = await borgService.runCommand(
           ['check', '--progress', repo.url], 
           progressCallback,
-          { passphrase: repo.passphrase, disableHostCheck: repo.trustHost }
+          { 
+              passphrase: repo.passphrase, 
+              disableHostCheck: repo.trustHost,
+              commandId: commandId 
+          }
       );
 
-      // 3. Update Status
+      // 3. Update Status (Check if it was aborted vs just failed)
+      // If activeCommandId is missing in current state, it might have been cleared by abort,
+      // but here we are in the closure of the finished promise.
       const timestamp = new Date().toLocaleString();
-      setRepos(prev => prev.map(r => r.id === repo.id ? { 
-          ...r, 
-          checkStatus: success ? 'ok' : 'error',
-          checkProgress: success ? 100 : undefined,
-          lastCheckTime: timestamp 
+      
+      setRepos(prev => {
+          // Check if it was already aborted manually
+          const current = prev.find(r => r.id === repo.id);
+          if (current?.checkStatus === 'aborted') {
+              return prev; // Don't overwrite aborted status
+          }
+          
+          return prev.map(r => r.id === repo.id ? { 
+            ...r, 
+            checkStatus: success ? 'ok' : 'error',
+            checkProgress: success ? 100 : undefined,
+            lastCheckTime: timestamp,
+            activeCommandId: undefined // Clear ID
+          } : r);
+      });
+  };
+
+  const handleAbortCheck = async (repo: Repository) => {
+      if (!repo.activeCommandId) return;
+      
+      console.log(`Aborting check for ${repo.name} (ID: ${repo.activeCommandId})`);
+      
+      // Update UI immediately
+      setRepos(prev => prev.map(r => r.id === repo.id ? {
+          ...r,
+          checkStatus: 'aborted',
+          checkProgress: undefined,
+          activeCommandId: undefined
       } : r));
+
+      // Call service to kill process
+      await borgService.stopCommand(repo.activeCommandId);
   };
 
   /**
@@ -417,6 +457,7 @@ const App: React.FC = () => {
               onConnect={handleConnect}
               onCheck={handleCheckIntegrity}
               onChangeView={setCurrentView}
+              onAbortCheck={handleAbortCheck}
            />
         );
     }

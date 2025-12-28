@@ -10,6 +10,8 @@ const fs = require('fs');
 let mainWindow;
 // Keep track of active mount processes to kill them on exit/unmount
 const activeMounts = new Map();
+// NEW: Keep track of general active commands (like check, list) to allow aborting
+const activeProcesses = new Map();
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -38,6 +40,9 @@ app.whenReady().then(createWindow);
 app.on('window-all-closed', () => {
   // Clean up mounts before quitting
   activeMounts.forEach((process) => {
+    try { process.kill(); } catch(e) {}
+  });
+  activeProcesses.forEach((process) => {
     try { process.kill(); } catch(e) {}
   });
   if (process.platform !== 'darwin') app.quit();
@@ -108,6 +113,9 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
           shell: !useWsl // Use shell true for windows native to handle path parsing better, false for WSL usually ok
         });
 
+        // Store reference to allow killing later
+        activeProcesses.set(commandId, child);
+
         child.stdout.on('data', (data) => {
           const text = data.toString();
           console.log(`[Borg STDOUT] ${text.trim()}`); // Log to terminal for debugging
@@ -154,20 +162,47 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
 
         child.on('close', (code) => {
           console.log(`[Borg] Process exited with code ${code}`);
+          activeProcesses.delete(commandId);
           resolve({ success: code === 0, code });
         });
 
         child.on('error', (err) => {
           console.error(`[Borg] Failed to start process: ${err.message}`);
+          activeProcesses.delete(commandId);
           if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: `Error: ${err.message}` });
           resolve({ success: false, error: err.message });
         });
     } catch (e) {
         console.error(`[Borg] Critical Error: ${e.message}`);
+        activeProcesses.delete(commandId);
         if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: `Critical Error: ${e.message}` });
         resolve({ success: false, error: e.message });
     }
   });
+});
+
+/**
+ * Stop a running command (abort check/create etc)
+ */
+ipcMain.handle('borg-stop', (event, { commandId }) => {
+    return new Promise((resolve) => {
+        const child = activeProcesses.get(commandId);
+        if (child) {
+            console.log(`[Borg] Killing process ${commandId}`);
+            // SIGTERM is polite, but on Windows/WSL mixed environment sometimes we need force.
+            // child.kill() sends SIGTERM by default.
+            const killed = child.kill(); 
+            if (killed) {
+                // Determine if we need to cleanup map here or wait for close event.
+                // Close event will fire shortly.
+                resolve({ success: true });
+            } else {
+                 resolve({ success: false, error: "Could not kill process" });
+            }
+        } else {
+            resolve({ success: false, error: "Process not found" });
+        }
+    });
 });
 
 /**

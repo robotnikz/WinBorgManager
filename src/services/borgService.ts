@@ -1,3 +1,4 @@
+
 // This service communicates with the Electron Main process
 
 // Since we are in Electron with nodeIntegration: true, we can require electron
@@ -59,9 +60,10 @@ export const borgService = {
   runCommand: async (
     args: string[], 
     onLog: (text: string) => void,
-    overrides?: { passphrase?: string, disableHostCheck?: boolean }
+    overrides?: { passphrase?: string, disableHostCheck?: boolean, commandId?: string }
   ): Promise<boolean> => {
-    const commandId = Math.random().toString(36).substring(7);
+    // Use provided ID or generate random
+    const commandId = overrides?.commandId || Math.random().toString(36).substring(7);
     const config = getBorgConfig();
 
     // Listen for logs for this specific command
@@ -85,6 +87,14 @@ export const borgService = {
     } finally {
       ipcRenderer.removeListener('terminal-log', logListener);
     }
+  },
+
+  /**
+   * Stop a running command by ID
+   */
+  stopCommand: async (commandId: string): Promise<boolean> => {
+      const result = await ipcRenderer.invoke('borg-stop', { commandId });
+      return result.success;
   },
 
   /**
@@ -113,15 +123,6 @@ export const borgService = {
     };
     ipcRenderer.on('terminal-log', logListener);
 
-    // Look up specific repo overrides if possible (passed via global state usually, 
-    // but here we might rely on the generic config or what was passed during connect.
-    // Ideally, we should pass the repo-specific passphrase here.
-    // For now, we rely on the caller setting the global or the repo context needs to be passed.
-    // IMPROVEMENT: We use the generic config. If repo has specific pass, it might need to be passed here.
-    // For now, assuming Global Passphrase or Keyfile without passphrase for mount.
-    // To support per-repo passphrase on mount, we would need to look it up in App state.
-    
-    // However, to fix the immediate issue, we assume the env vars generation is correct.
     const result = await ipcRenderer.invoke('borg-mount', { 
         args, 
         mountId, 

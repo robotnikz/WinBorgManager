@@ -22,9 +22,12 @@ export interface Repository {
   trustHost?: boolean;
   
   // Integrity Check State
-  checkStatus?: 'idle' | 'running' | 'ok' | 'error';
+  checkStatus?: 'idle' | 'running' | 'ok' | 'error' | 'aborted';
   checkProgress?: number; // 0-100
   lastCheckTime?: string;
+  
+  // To allow aborting
+  activeCommandId?: string;
 }
 
 export interface Archive {

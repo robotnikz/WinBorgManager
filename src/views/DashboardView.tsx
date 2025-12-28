@@ -13,7 +13,8 @@ import {
   Zap,
   Loader2,
   CheckCircle2,
-  XCircle
+  XCircle,
+  XSquare
 } from 'lucide-react';
 import Button from '../components/Button';
 import { parseSizeString, formatBytes } from '../utils/formatters';
@@ -25,9 +26,10 @@ interface DashboardViewProps {
   onConnect: (repo: Repository) => void;
   onCheck: (repo: Repository) => void;
   onChangeView: (view: any) => void;
+  onAbortCheck?: (repo: Repository) => void;
 }
 
-const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMount, onConnect, onCheck, onChangeView }) => {
+const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMount, onConnect, onCheck, onChangeView, onAbortCheck }) => {
   
   // Calculate Statistics
   const stats = useMemo(() => {
@@ -221,6 +223,11 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMou
                                                     <XCircle className="w-3 h-3" /> Check Failed
                                                 </span>
                                             )}
+                                             {repo.checkStatus === 'aborted' && (
+                                                <span className="flex items-center gap-1 text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded ml-2">
+                                                    <XSquare className="w-3 h-3" /> Aborted
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -233,7 +240,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMou
                                     </div>
                                     <div className="flex gap-2">
                                         {repo.checkStatus === 'running' ? (
-                                            <Button size="sm" variant="secondary" disabled>
+                                            <Button size="sm" variant="danger" onClick={() => onAbortCheck?.(repo)}>
                                                 Abort
                                             </Button>
                                         ) : (
