@@ -29,6 +29,7 @@ const App: React.FC = () => {
 
   const [mounts, setMounts] = useState<MountPoint[]>([]);
   const [archives, setArchives] = useState<Archive[]>([]);
+  const [preselectedRepoId, setPreselectedRepoId] = useState<string | null>(null);
   
   // Persist Repos when they change
   useEffect(() => {
@@ -111,18 +112,6 @@ const App: React.FC = () => {
             }, 500);
         }
     }
-  };
-
-  const handleQuickMount = (repo: Repository) => {
-    const latestArchive = archives.length > 0 ? archives[0].name : 'latest';
-    const usedDrives = mounts.map(m => m.localPath);
-    const driveLetters = ['Z:', 'Y:', 'X:', 'W:', 'V:'];
-    const drive = driveLetters.find(d => !usedDrives.includes(d)) || 'Z:';
-    
-    const isWsl = localStorage.getItem('winborg_use_wsl') === 'true';
-    const mountPath = isWsl ? `/mnt/wsl/borg-${repo.name.replace(/\s+/g, '-')}-${Math.floor(Math.random()*1000)}` : drive;
-
-    handleMount(repo.id, latestArchive, mountPath);
   };
 
   const handleUnmount = async (id: string) => {
@@ -222,6 +211,20 @@ const App: React.FC = () => {
     );
   };
 
+  /**
+   * New Quick Mount: 
+   * Instead of blindly mounting 'latest', we open the Mount UI 
+   * and trigger a list command to fetch available archives.
+   */
+  const handleQuickMount = (repo: Repository) => {
+    // 1. Switch to Mounts View and Preselect the repo
+    setPreselectedRepoId(repo.id);
+    setCurrentView(View.MOUNTS);
+    
+    // 2. Trigger connection to refresh archive list
+    handleConnect(repo);
+  };
+
   const handleAddRepo = (repoData: { name: string; url: string; encryption: 'repokey' | 'keyfile' | 'none', passphrase?: string, trustHost?: boolean }) => {
     const newRepo: Repository = {
        id: Math.random().toString(36).substr(2, 9),
@@ -268,6 +271,7 @@ const App: React.FC = () => {
             archives={archives}
             onUnmount={handleUnmount} 
             onMount={handleMount} 
+            preselectedRepoId={preselectedRepoId}
           />
         );
       case View.SETTINGS:
@@ -307,7 +311,14 @@ const App: React.FC = () => {
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#f3f3f3]">
       <TitleBar />
       <div className="flex flex-1 overflow-hidden pt-9">
-          <Sidebar currentView={currentView} onChangeView={setCurrentView} />
+          <Sidebar 
+            currentView={currentView} 
+            onChangeView={(view) => {
+                setCurrentView(view);
+                // Reset preselection when manually changing views
+                setPreselectedRepoId(null);
+            }} 
+          />
           
           <TerminalModal 
             isOpen={isTerminalOpen}

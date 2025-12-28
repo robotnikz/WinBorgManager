@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MountPoint, Repository, Archive } from '../types';
 import Button from '../components/Button';
-import { FolderOpen, XCircle, HardDrive, Terminal, Laptop } from 'lucide-react';
+import { FolderOpen, XCircle, HardDrive, Terminal, Loader2 } from 'lucide-react';
 
 interface MountsViewProps {
   mounts: MountPoint[];
@@ -9,9 +9,10 @@ interface MountsViewProps {
   archives: Archive[];
   onUnmount: (id: string) => void;
   onMount: (repoId: string, archiveName: string, path: string) => void;
+  preselectedRepoId?: string | null;
 }
 
-const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmount, onMount }) => {
+const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmount, onMount, preselectedRepoId }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [selectedRepo, setSelectedRepo] = useState(repos[0]?.id || '');
   const [selectedArchive, setSelectedArchive] = useState(archives[0]?.name || '');
@@ -30,13 +31,22 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
      const randomId = Math.floor(Math.random() * 9000) + 1000;
      setMountPath(wslEnabled ? `/mnt/wsl/winborg-${randomId}` : 'Z:');
 
-     if (!selectedRepo && repos.length > 0) {
+     // Handle Preselection from other views
+     if (preselectedRepoId) {
+        setIsCreating(true);
+        setSelectedRepo(preselectedRepoId);
+     } else if (!selectedRepo && repos.length > 0) {
         setSelectedRepo(repos[0].id);
      }
+
+     // Auto-select first archive if available and none selected
      if (!selectedArchive && archives.length > 0) {
         setSelectedArchive(archives[0].name);
+     } else if (archives.length > 0 && !archives.find(a => a.name === selectedArchive)) {
+        // If current selection is not in list (e.g. list refreshed), pick first
+        setSelectedArchive(archives[0].name);
      }
-  }, [repos, archives, selectedRepo, selectedArchive]);
+  }, [repos, archives, selectedRepo, selectedArchive, preselectedRepoId]);
 
   const handleMount = () => {
     onMount(selectedRepo, selectedArchive, mountPath);
@@ -45,15 +55,15 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
 
   const handleOpenFolder = (path: string) => {
     // Basic heuristics: if it looks like a Linux path, try to open via \\wsl$
-    // NOTE: This assumes 'Ubuntu' is the distro, ideally we'd store the distro name too.
     if (path.startsWith('/')) {
-        // Alert user for now as we can't spawn explorer.exe directly from here easily without IPC extension
         alert(`Access this in Windows Explorer via: \\\\wsl$\\Ubuntu${path.replace(/\//g, '\\')}`);
     } else {
         // Windows drive
         alert(`Opening ${path}`);
     }
   };
+
+  const currentRepoStatus = repos.find(r => r.id === selectedRepo)?.status;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -87,13 +97,21 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
              </div>
              
              <div>
-               <label className="block text-xs font-medium text-slate-500 mb-1">Archive</label>
+               <label className="block text-xs font-medium text-slate-500 mb-1 flex justify-between">
+                   Archive
+                   {currentRepoStatus === 'connecting' && <span className="text-blue-500 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin"/> Loading...</span>}
+               </label>
                <select 
-                 className="w-full p-2 bg-gray-50 border border-gray-200 rounded-md text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                 className="w-full p-2 bg-gray-50 border border-gray-200 rounded-md text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50"
                  value={selectedArchive}
                  onChange={(e) => setSelectedArchive(e.target.value)}
+                 disabled={currentRepoStatus === 'connecting' || archives.length === 0}
                >
-                 {archives.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
+                 {archives.length === 0 ? (
+                     <option>No archives found (Connect first)</option>
+                 ) : (
+                     archives.map(a => <option key={a.id} value={a.name}>{a.name} ({a.time})</option>)
+                 )}
                </select>
              </div>
 
@@ -121,7 +139,9 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
            </div>
 
            <div className="flex justify-end pt-2">
-             <Button onClick={handleMount}>Mount Archive</Button>
+             <Button onClick={handleMount} disabled={!selectedArchive || currentRepoStatus === 'connecting' || archives.length === 0}>
+                {currentRepoStatus === 'connecting' ? 'Loading Archives...' : 'Mount Archive'}
+             </Button>
            </div>
         </div>
       )}
