@@ -4,11 +4,11 @@ import TitleBar from './components/TitleBar';
 import RepositoriesView from './views/RepositoriesView';
 import MountsView from './views/MountsView';
 import SettingsView from './views/SettingsView';
+import DashboardView from './views/DashboardView';
 import TerminalModal from './components/TerminalModal';
 import FuseSetupModal from './components/FuseSetupModal';
 import { View, Repository, MountPoint, Archive } from './types';
 import { MOCK_REPOS, MOCK_ARCHIVES } from './constants';
-import { HardDrive } from 'lucide-react';
 import { borgService } from './services/borgService';
 
 const App: React.FC = () => {
@@ -323,30 +323,13 @@ const App: React.FC = () => {
       case View.DASHBOARD:
       default:
         return (
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-             <div className="mb-8">
-               <h1 className="text-3xl font-bold text-slate-800">Dashboard</h1>
-               <p className="text-slate-500">System Status</p>
-             </div>
-             
-             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-6 text-white shadow-lg shadow-blue-200">
-                   <div className="opacity-80 text-sm font-medium mb-1">Total Repositories</div>
-                   <div className="text-4xl font-bold">{repos.length}</div>
-                </div>
-                
-                <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-                   <div className="text-slate-500 text-sm font-medium mb-1">Active Mounts</div>
-                   <div className="text-4xl font-bold text-slate-800">{mounts.length}</div>
-                </div>
-
-                <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-                   <div className="text-slate-500 text-sm font-medium mb-1">Loaded Archives</div>
-                   <div className="text-4xl font-bold text-slate-800">{archives.length}</div>
-                   <div className="text-xs text-slate-400 mt-2">From last connection</div>
-                </div>
-             </div>
-          </div>
+           <DashboardView 
+              repos={repos} 
+              mounts={mounts}
+              onQuickMount={handleQuickMount}
+              onConnect={handleConnect}
+              onChangeView={setCurrentView}
+           />
         );
     }
   };
