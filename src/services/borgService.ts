@@ -63,6 +63,37 @@ const extractJson = (text: string) => {
     return null;
 };
 
+// Helper to parse URL
+const parseBorgUrl = (url: string) => {
+    try {
+        if (url.startsWith('ssh://')) {
+            const u = new URL(url);
+            return {
+                isSsh: true,
+                user: u.username,
+                host: u.hostname,
+                port: u.port || '22',
+                path: u.pathname // careful with leading /
+            };
+        }
+    } catch(e) {}
+    
+    // SCP Style: user@host:path
+    const scpMatch = url.match(/^([^@]+)@([^:]+):(.*)$/);
+    if (scpMatch) {
+        return {
+            isSsh: true,
+            user: scpMatch[1],
+            host: scpMatch[2],
+            port: '22',
+            path: scpMatch[3]
+        };
+    }
+    
+    // Local path
+    return { isSsh: false, path: url };
+};
+
 export const borgService = {
   /**
    * Run a one-off borg command (list, info, create)
@@ -71,7 +102,7 @@ export const borgService = {
   runCommand: async (
     args: string[], 
     onLog: (text: string) => void,
-    overrides?: { passphrase?: string, disableHostCheck?: boolean, commandId?: string }
+    overrides?: { passphrase?: string, disableHostCheck?: boolean, commandId?: string, forceBinary?: string }
   ): Promise<boolean> => {
     // Use provided ID or generate random
     const commandId = overrides?.commandId || Math.random().toString(36).substring(7);
@@ -92,7 +123,8 @@ export const borgService = {
           commandId, 
           useWsl: config.useWsl,
           executablePath: config.path,
-          envVars: getEnvVars(config, overrides)
+          envVars: getEnvVars(config, overrides),
+          forceBinary: overrides?.forceBinary
       });
       return result.success;
     } finally {
@@ -101,7 +133,8 @@ export const borgService = {
   },
 
   /**
-   * Remove locks (lock.roster, lock.exclusive) from a repository
+   * Remove locks (lock.roster, lock.exclusive) from a repository.
+   * Standard Borg 'break-lock'.
    */
   breakLock: async (
     repoUrl: string,
@@ -114,6 +147,76 @@ export const borgService = {
           onLog,
           overrides
       );
+  },
+  
+  /**
+   * Physically delete lock.roster and lock.exclusive using `rm` via SSH or Local
+   */
+  forceDeleteLockFiles: async (
+    repoUrl: string,
+    onLog: (text: string) => void,
+    overrides?: { passphrase?: string, disableHostCheck?: boolean }
+  ): Promise<boolean> => {
+      const parsed = parseBorgUrl(repoUrl);
+      if (!parsed) {
+          onLog("Error: Could not parse repository URL for manual deletion.");
+          return false;
+      }
+      
+      const config = getBorgConfig();
+
+      if (parsed.isSsh) {
+          const userHost = `${parsed.user ? parsed.user + '@' : ''}${parsed.host}`;
+          // Clean path: Ensure we don't double slash if not needed, but typical borg paths are absolute or relative to home
+          const basePath = parsed.path!;
+          // Construct the removal command
+          const removeCmd = `rm -rf "${basePath}/lock.roster" "${basePath}/lock.exclusive"`;
+          
+          onLog(`Connecting to ${userHost} via SSH to delete lock files...`);
+          onLog(`Command: ${removeCmd}`);
+          
+          // Execute SSH via borgService's generic runner but forcing 'ssh' binary
+          const args = [
+              '-p', parsed.port!,
+              // Strict Host Key Checking options
+              ...(overrides?.disableHostCheck || config.disableHostCheck ? ['-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null'] : []),
+              '-o', 'BatchMode=yes', // Fail if password needed (keys required)
+              userHost,
+              removeCmd
+          ];
+
+          return await borgService.runCommand(args, onLog, {
+              ...overrides,
+              forceBinary: 'ssh'
+          });
+          
+      } else {
+          // Local Path (or mapped drive)
+          const basePath = parsed.path!;
+          const rosterPath = `${basePath}/lock.roster`;
+          const exclusivePath = `${basePath}/lock.exclusive`;
+          
+          onLog(`Deleting local lock files in: ${basePath}`);
+          
+          // Use 'rm -rf' because in WSL/GitBash/Mac/Linux this works.
+          // Even on Windows if using WSL backend, this runs in WSL so 'rm' works.
+          // If native windows, we might need 'del'. 
+          
+          if (config.useWsl) {
+               return await borgService.runCommand(['-rf', rosterPath, exclusivePath], onLog, {
+                   ...overrides,
+                   forceBinary: 'rm'
+               });
+          } else {
+              // Windows Native
+              // We use powershell or cmd via the spawn mechanism
+              // But 'borg-spawn' expects a binary. 'rm' is an alias in PS, not binary.
+              // Try cmd /c del. But folder needs rmdir.
+              // Easier: Just try 'rm' assuming User has git bash or similar, or just fail safely.
+              onLog("Manual local deletion on Native Windows not fully supported via UI. Please delete files manually via Explorer.");
+              return false;
+          }
+      }
   },
 
   /**

@@ -1,3 +1,4 @@
+
 /**
  * REAL BACKEND FOR WINBORG
  */
@@ -80,18 +81,22 @@ function getEnv(customEnv) {
 /**
  * Executes a Borg command
  */
-ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, envVars }) => {
+ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, envVars, forceBinary }) => {
   return new Promise((resolve) => {
     let bin, finalArgs;
+    
+    // Allow overriding the binary (e.g. using 'ssh' instead of 'borg' for cleanup tasks)
+    const targetBinary = forceBinary || 'borg';
 
     if (useWsl) {
         bin = 'wsl'; // Use system wsl.exe
         // Use 'exec' inside WSL so env vars are picked up cleanly and we run the command
         // args is an array like ['list', 'ssh://...']. 
         // We convert to: wsl --exec borg list ssh://...
-        finalArgs = ['--exec', 'borg', ...args];
+        finalArgs = ['--exec', targetBinary, ...args];
     } else {
-        bin = executablePath || 'borg';
+        // If native windows, and asking for borg, use configured path. Otherwise assume system path (e.g. ssh)
+        bin = (targetBinary === 'borg') ? (executablePath || 'borg') : targetBinary;
         finalArgs = args;
         
         // Verify existence if it looks like a full path and we aren't using WSL
@@ -143,10 +148,9 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
               lower.includes('not found') ||
               lower.includes('nicht gefunden')
           ) {
-              const hint = `\n[WinBorg Hint] 🔴 Borg binary not found!\n` +
-                           `1. If you want to use Windows native: Install Borg (e.g. 'scoop install borgbackup').\n` +
-                           `2. If you want to use WSL (Linux): Go to Settings and enable 'Use WSL'.\n` + 
-                           `3. Check the Path in Settings.`;
+              const hint = `\n[WinBorg Hint] 🔴 Binary '${targetBinary}' not found!\n` +
+                           `1. If you want to use Windows native: Install it.\n` +
+                           `2. If you want to use WSL (Linux): Ensure it is installed in the distro.\n`;
               if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: hint });
           }
           

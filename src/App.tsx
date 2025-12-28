@@ -386,19 +386,29 @@ const App: React.FC = () => {
   
   /**
    * BREAK LOCK HANDLER
-   * Runs 'borg break-lock' to remove lock.roster and lock.exclusive
+   * Runs 'borg break-lock' and then FORCE delete lock files
    */
   const handleBreakLock = async (repo: Repository) => {
-      if(!window.confirm(`Are you sure you want to break the lock for ${repo.name}?\n\nThis will delete 'lock.roster' and 'lock.exclusive'. Only do this if you are sure no other backup process is currently running.`)) {
+      if(!window.confirm(`FORCE UNLOCK REPO:\n\n1. Run 'borg break-lock' to clear stale lock entries.\n2. Force delete 'lock.roster' and 'lock.exclusive' files from server via SSH.\n\nUse this only if the repo is definitely not in use!`)) {
           return;
       }
 
       setIsTerminalOpen(true);
-      setTerminalTitle(`Breaking Lock for ${repo.name}`);
+      setTerminalTitle(`Unlocking Repo: ${repo.name}`);
       setTerminalLogs([]);
       setIsProcessing(true);
 
-      const success = await borgService.breakLock(
+      // Step 1: Standard Break Lock
+      setTerminalLogs(prev => [...prev, "--- Step 1: Running borg break-lock ---"]);
+      await borgService.breakLock(
+          repo.url,
+          (log) => setTerminalLogs(prev => [...prev, log.trim()]),
+          { passphrase: repo.passphrase, disableHostCheck: repo.trustHost }
+      );
+      
+      // Step 2: Force Delete Files
+      setTerminalLogs(prev => [...prev, " ", "--- Step 2: Force deleting lock files (rm -rf) ---"]);
+      const deleteSuccess = await borgService.forceDeleteLockFiles(
           repo.url,
           (log) => setTerminalLogs(prev => [...prev, log.trim()]),
           { passphrase: repo.passphrase, disableHostCheck: repo.trustHost }
@@ -406,11 +416,11 @@ const App: React.FC = () => {
 
       setIsProcessing(false);
       
-      if(success) {
-          setTerminalLogs(prev => [...prev, "Lock successfully removed."]);
+      if(deleteSuccess) {
+          setTerminalLogs(prev => [...prev, " ", "✅ Lock files deleted successfully."]);
           setTimeout(() => setIsTerminalOpen(false), 2000);
       } else {
-          setTerminalLogs(prev => [...prev, "Failed to break lock."]);
+          setTerminalLogs(prev => [...prev, " ", "❌ Failed to delete lock files. Check SSH permissions."]);
       }
   };
 
