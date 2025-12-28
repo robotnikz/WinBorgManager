@@ -1,6 +1,8 @@
 
 # WinBorg Manager
 
+![WinBorg Manager Dashboard](/images/dashboard.png)
+
 **A modern, Windows 11-styled GUI for BorgBackup.**
 
 WinBorg Manager bridges the gap between the powerful deduplicating backup tool **BorgBackup** and the **Windows** desktop experience. It leverages the **Windows Subsystem for Linux (WSL)** to run Borg natively while providing a seamless, beautiful user interface to manage repositories, create archives, and—most importantly—mount backups directly into Windows Explorer.
