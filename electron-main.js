@@ -14,6 +14,9 @@ const activeMounts = new Map();
 // NEW: Keep track of general active commands (like check, list) to allow aborting
 const activeProcesses = new Map();
 
+// Helper to determine if we are in development mode
+const isDev = !app.isPackaged;
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -24,6 +27,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false, // Security: Allow direct access to node in renderer for this local app
+      webSecurity: false // Sometimes needed for local file loading in dev, can be stricter in prod
     },
     backgroundColor: '#f3f3f3',
     icon: path.join(__dirname, 'public/icon.png'),
@@ -32,8 +36,17 @@ function createWindow() {
     titleBarOverlay: false
   });
 
-  // For development (Vite runs on 5173 by default)
-  mainWindow.loadURL('http://localhost:5173');
+  if (isDev) {
+    // Development: Load from Vite Dev Server
+    console.log('Running in Development Mode');
+    mainWindow.loadURL('http://localhost:5173');
+    // Open DevTools automatically in dev
+    // mainWindow.webContents.openDevTools(); 
+  } else {
+    // Production: Load from built files
+    console.log('Running in Production Mode');
+    mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
+  }
 }
 
 app.whenReady().then(createWindow);
