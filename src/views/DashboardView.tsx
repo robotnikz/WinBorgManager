@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { Repository, MountPoint, View } from '../types';
+import { Repository, MountPoint, View, ActivityLogEntry } from '../types';
 import { 
   ShieldCheck, 
   HardDrive, 
@@ -17,11 +17,12 @@ import {
   XSquare
 } from 'lucide-react';
 import Button from '../components/Button';
-import { parseSizeString, formatBytes } from '../utils/formatters';
+import { parseSizeString, formatBytes, formatDate } from '../utils/formatters';
 
 interface DashboardViewProps {
   repos: Repository[];
   mounts: MountPoint[];
+  activityLogs: ActivityLogEntry[];
   onQuickMount: (repo: Repository) => void;
   onConnect: (repo: Repository) => void;
   onCheck: (repo: Repository) => void;
@@ -29,7 +30,7 @@ interface DashboardViewProps {
   onAbortCheck?: (repo: Repository) => void;
 }
 
-const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMount, onConnect, onCheck, onChangeView, onAbortCheck }) => {
+const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, activityLogs, onQuickMount, onConnect, onCheck, onChangeView, onAbortCheck }) => {
   
   // Calculate Statistics
   const stats = useMemo(() => {
@@ -70,6 +71,19 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMou
     } else {
         onChangeView(View.REPOSITORIES);
     }
+  };
+
+  // Helper to format rough relative time for dashboard
+  const getRelativeTime = (iso: string) => {
+      try {
+          const diff = Date.now() - new Date(iso).getTime();
+          const mins = Math.floor(diff / 60000);
+          if (mins < 1) return 'Just now';
+          if (mins < 60) return `${mins}m ago`;
+          const hours = Math.floor(mins / 60);
+          if (hours < 24) return `${hours}h ago`;
+          return formatDate(iso);
+      } catch { return iso; }
   };
 
   return (
@@ -300,29 +314,25 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMou
                 </div>
             </div>
 
-            {/* Simulated Activity Log */}
+            {/* REAL Activity Log */}
             <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
                 <h3 className="font-semibold text-slate-800 mb-4">Activity Log</h3>
                 <div className="relative border-l border-gray-200 ml-2 space-y-6">
-                    {/* Mock Data for aesthetics */}
-                    <ActivityItem 
-                        status="success"
-                        title="Backup Successful"
-                        desc="Hetzner StorageBox"
-                        time="2 hours ago"
-                    />
-                     <ActivityItem 
-                        status="success"
-                        title="Archive Pruned"
-                        desc="Removed 3 old archives"
-                        time="5 hours ago"
-                    />
-                    <ActivityItem 
-                        status="warning"
-                        title="Connection Retry"
-                        desc="Local NAS (Timeout)"
-                        time="1 day ago"
-                    />
+                    {activityLogs.length === 0 ? (
+                        <div className="text-center py-4 text-slate-400 text-xs">
+                            No recent activity
+                        </div>
+                    ) : (
+                        activityLogs.slice(0, 5).map(log => (
+                            <ActivityItem 
+                                key={log.id}
+                                status={log.status}
+                                title={log.title}
+                                desc={log.detail}
+                                time={getRelativeTime(log.time)}
+                            />
+                        ))
+                    )}
                 </div>
                 <button 
                     onClick={() => onChangeView(View.ACTIVITY)}
@@ -368,17 +378,25 @@ const StatCard = ({ title, value, icon: Icon, color, subtext }: any) => {
 }
 
 const ActivityItem = ({ status, title, desc, time }: any) => {
+    const statusColors = {
+        success: 'bg-green-500',
+        warning: 'bg-yellow-500',
+        error: 'bg-red-500',
+        info: 'bg-blue-500'
+    };
+    
+    // Fallback if an unknown status string is passed
+    const dotColor = statusColors[status as keyof typeof statusColors] || 'bg-gray-400';
+
     return (
         <div className="ml-6 relative">
-            <div className={`absolute -left-[31px] top-0 w-4 h-4 rounded-full border-2 border-white ring-1 ring-gray-100 ${
-                status === 'success' ? 'bg-green-500' : status === 'warning' ? 'bg-yellow-500' : 'bg-red-500'
-            }`}></div>
+            <div className={`absolute -left-[31px] top-0 w-4 h-4 rounded-full border-2 border-white ring-1 ring-gray-100 ${dotColor}`}></div>
             <div className="flex justify-between items-start">
-                <div>
-                    <div className="text-sm font-medium text-slate-800">{title}</div>
-                    <div className="text-xs text-slate-500">{desc}</div>
+                <div className="flex-1 overflow-hidden mr-2">
+                    <div className="text-sm font-medium text-slate-800 truncate">{title}</div>
+                    <div className="text-xs text-slate-500 truncate" title={desc}>{desc}</div>
                 </div>
-                <div className="text-[10px] text-slate-400 font-mono mt-0.5">{time}</div>
+                <div className="text-[10px] text-slate-400 font-mono mt-0.5 whitespace-nowrap">{time}</div>
             </div>
         </div>
     )

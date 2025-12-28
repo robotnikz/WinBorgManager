@@ -600,6 +600,7 @@ const App: React.FC = () => {
            <DashboardView 
               repos={repos} 
               mounts={mounts}
+              activityLogs={activityLogs}
               onQuickMount={handleQuickMount}
               onConnect={handleConnect}
               onCheck={handleCheckIntegrity}
