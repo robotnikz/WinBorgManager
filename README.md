@@ -1,4 +1,3 @@
-
 # WinBorg Manager
 
 ![WinBorg Manager Dashboard](/images/dashboard.png)
@@ -9,7 +8,7 @@ WinBorg Manager bridges the gap between the powerful deduplicating backup tool *
 
 ## 💡 Motivation
 
-While **Vorta** is a fantastic and comprehensive tool for BorgBackup, I wanted to create a **modern, lightweight alternative specifically for Windows**. My goal was to build an app that feels native (using Windows 11 aesthetics) and focuses on speed and simplicity—making it incredibly fast to **mount archives and access individual files** via Windows Explorer without the overhead of a heavy cross-platform interface.
+I use **Vorta** for BorgBackup on my Linux machine to connect to my remote SSH Borg repositories. While Vorta is excellent, I wanted to create a **modern, lightweight alternative specifically for Windows**. My goal was to build an app that feels native (using Windows 11 aesthetics) and focuses on speed and simplicity—making it incredibly fast to **mount archives and access individual files** via Windows Explorer without the overhead of a heavy cross-platform interface.
 
 ## 🚀 Features
 
