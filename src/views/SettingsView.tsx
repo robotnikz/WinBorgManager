@@ -140,7 +140,7 @@ const SettingsView: React.FC = () => {
             )}
 
             <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Global Repository Passphrase</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Default Passphrase (Fallback)</label>
                 <div className="flex gap-2 relative">
                     <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input 
@@ -151,8 +151,8 @@ const SettingsView: React.FC = () => {
                         placeholder="••••••••••••"
                     />
                 </div>
-                <p className="text-[10px] text-green-600 mt-1 flex items-center gap-1">
-                    <Check className="w-3 h-3" /> Auto-injected. You will <b>not</b> be prompted in terminal.
+                <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
+                    Used automatically if a repository does <b>not</b> have a specific passphrase saved.
                 </p>
             </div>
 

@@ -154,12 +154,14 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                         <input 
                           type="password" 
                           className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm text-slate-900 shadow-sm"
-                          placeholder="Optional"
+                          placeholder="Optional (Overrides Default)"
                           value={repoForm.passphrase}
                           onChange={e => setRepoForm({...repoForm, passphrase: e.target.value})}
                         />
                      </div>
-                     <p className="text-[9px] text-green-600 mt-1">Auto-injected into background process.</p>
+                     <p className="text-[9px] text-slate-500 mt-1">
+                        Leave empty to use the <b>Default Passphrase</b> from Settings.
+                     </p>
                    </div>
                </div>
 
