@@ -17,12 +17,15 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
   const [isCreating, setIsCreating] = useState(false);
   const [selectedRepo, setSelectedRepo] = useState(repos[0]?.id || '');
   const [selectedArchive, setSelectedArchive] = useState(archives[0]?.name || '');
-  const [useWsl, setUseWsl] = useState(false);
+  
+  // ALWAYS DEFAULT TO TRUE FOR WSL AS REQUESTED
+  const [useWsl, setUseWsl] = useState(true);
   
   // Initialize state based on props and config
   useEffect(() => {
-     const wslEnabled = localStorage.getItem('winborg_use_wsl') === 'true';
-     setUseWsl(wslEnabled);
+     const storedWsl = localStorage.getItem('winborg_use_wsl');
+     // Default to TRUE if not set, or if set to true
+     setUseWsl(storedWsl === null ? true : storedWsl === 'true');
 
      // Handle Preselection
      if (preselectedRepoId) {
@@ -43,14 +46,13 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
   const handleMount = () => {
     // FORCE PATH LOGIC:
     // If WSL: /mnt/wsl/winborg/<ArchiveName>
-    // If Windows Native: Z: (Default fallback)
+    // If Windows Native (Fallback): Z:
     let finalPath = 'Z:';
     
-    // Check config fresh
-    const isWslActive = localStorage.getItem('winborg_use_wsl') === 'true';
-    
-    if (isWslActive) {
-        finalPath = `/mnt/wsl/winborg/${selectedArchive}`;
+    if (useWsl) {
+        // CLEANUP ARCHIVE NAME FOR PATH (remove timestamp parts if messy)
+        const archiveNameClean = selectedArchive.replace(/[^a-zA-Z0-9._-]/g, '_');
+        finalPath = `/mnt/wsl/winborg/${archiveNameClean}`;
     }
 
     onMount(selectedRepo, selectedArchive, finalPath);
@@ -68,9 +70,11 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
   };
 
   const currentRepoStatus = repos.find(r => r.id === selectedRepo)?.status;
+  
+  // Dynamic Preview
   const targetPathPreview = useWsl 
     ? `/mnt/wsl/winborg/${selectedArchive || '...'}` 
-    : 'Z: (Windows Native)';
+    : 'Z: (Windows Native - Warning: WSL Recommended)';
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -128,7 +132,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
            <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-800">
                <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
                <div className="flex-1 font-mono text-xs break-all">
-                   Target Path: {targetPathPreview}
+                   <strong>Mount Target:</strong> {targetPathPreview}
                </div>
            </div>
 
