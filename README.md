@@ -34,8 +34,8 @@ WinBorg relies on a lightweight Linux installation running in the background to 
     wsl --install
     ```
 4.  **Restart your computer** when prompted.
-5.  After restarting, a terminal window will open automatically to finish installing **Ubuntu**.
-6.  When asked, create a **username** and **password** for your Linux system (remember this password).
+5.  After restarting, a terminal window will open automatically to finish installing **Ubuntu**. If that's not the case, search in Windows Store for Ubuntu and install it.
+6.  Start Ubuntu, When asked, create a **username** and **password** for your Linux system (remember this password).
 
 ### Phase 2: Install Borg Dependencies
 
@@ -122,7 +122,7 @@ If you want to contribute to WinBorg:
 
 ```bash
 # Clone the repo
-git clone https://github.com/yourname/winborg-manager.git
+git clone https://github.com/robotnikz/WinBorg.git
 
 # Install dependencies
 npm install
