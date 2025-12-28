@@ -76,21 +76,20 @@ const SettingsView: React.FC = () => {
         <div className="bg-blue-50 border border-blue-100 rounded-lg p-5 mb-6 text-sm text-slate-700 space-y-4">
             <h3 className="font-semibold text-blue-900 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-blue-500" /> 
-                {useWsl ? 'WSL Setup Instructions' : 'Windows Native Setup'}
+                {useWsl ? 'How to set up WSL (Simple Guide)' : 'Windows Native Setup'}
             </h3>
             
             {useWsl ? (
                 <div className="space-y-3">
-                    <p>Ensure you have a default WSL distro installed (like Ubuntu) and Borg is installed inside it.</p>
+                    <p className="text-xs">1. Open PowerShell as Admin and run <code>wsl --install</code>, then restart PC.</p>
+                    <p className="text-xs">2. Open "Ubuntu" from Start menu, create user/password.</p>
+                    <p className="text-xs">3. Run this command inside Ubuntu to get Borg:</p>
                     <div className="bg-slate-900 rounded p-3 font-mono text-xs">
-                        <div className="text-slate-500 mb-1 select-none"># Open your WSL terminal (Ubuntu/Debian) and run:</div>
-                        <code className="block text-green-400 select-all">
-                            sudo apt update && sudo apt install borgbackup
+                        <code className="block text-green-400 select-all cursor-pointer" onClick={() => navigator.clipboard.writeText('sudo apt update && sudo apt install borgbackup fuse -y')}>
+                            sudo apt update && sudo apt install borgbackup fuse -y
                         </code>
+                        <div className="text-slate-500 text-[10px] mt-1 text-right">(Click to copy)</div>
                     </div>
-                    <p className="text-xs text-blue-700">
-                        Note: For mounts to work in WSL, you might need to install `fuse` inside WSL as well.
-                    </p>
                 </div>
             ) : (
                 <div className="space-y-3">
@@ -130,6 +129,9 @@ const SettingsView: React.FC = () => {
                         placeholder="••••••••••••"
                     />
                 </div>
+                <p className="text-xs text-slate-400 mt-2">
+                    Note: If you use different passwords for different repos, leave this blank and you will be prompted (in a future update).
+                </p>
             </div>
             
             <div>
@@ -139,7 +141,7 @@ const SettingsView: React.FC = () => {
                     disabled={testStatus === 'loading'}
                     className={`w-full ${testStatus === 'success' ? 'border-green-500 text-green-600 bg-green-50' : testStatus === 'error' ? 'border-red-500 text-red-600 bg-red-50' : ''}`}
                 >
-                    {testStatus === 'loading' ? 'Testing Connection...' : testStatus === 'success' ? 'Connection Successful!' : testStatus === 'error' ? 'Test Failed' : 'Test Borg Version'}
+                    {testStatus === 'loading' ? 'Testing Connection...' : testStatus === 'success' ? 'Connection Successful!' : testStatus === 'error' ? 'Test Failed (Is WSL installed?)' : 'Test Borg Connection'}
                 </Button>
             </div>
         </div>
