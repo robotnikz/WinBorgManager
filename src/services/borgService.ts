@@ -283,10 +283,16 @@ export const borgService = {
     const config = getBorgConfig();
     
     // Construct args. 
-    // If WSL, mountPoint is a linux path (e.g. /mnt/wsl/borg)
-    // If Windows, mountPoint is a Drive Letter (e.g. Z:)
-    // Added --foreground to ensure process stays alive and tracked by Electron
-    const args = ['mount', '--foreground', `${repoUrl}::${archiveName}`, mountPoint];
+    // CRITICAL for Windows Access: '-o allow_other'
+    // This allows the Windows User (who connects via Plan9 network share) to see the files 
+    // owned by the WSL linux user. Without this, Explorer shows "Access Denied".
+    const args = [
+        'mount', 
+        '--foreground', 
+        '-o', 'allow_other', 
+        `${repoUrl}::${archiveName}`, 
+        mountPoint
+    ];
     
     // Global log listener for mounts
     const logListener = (_: any, msg: { id: string, text: string }) => {

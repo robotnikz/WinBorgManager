@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Copy, AlertTriangle } from 'lucide-react';
 import Button from './Button';
@@ -10,8 +11,10 @@ interface FuseSetupModalProps {
 const FuseSetupModal: React.FC<FuseSetupModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
-  // Updated command: Added 'fuse3' specifically as required by fusermount3 error
-  const command = "sudo apt update && sudo apt install fuse3 libfuse2 python3-llfuse python3-pyfuse3 -y && sudo chmod 666 /dev/fuse";
+  // This one-liner does two things:
+  // 1. Installs dependencies
+  // 2. Uncomments/Adds 'user_allow_other' in /etc/fuse.conf to allow Windows Explorer access
+  const command = "sudo apt update && sudo apt install fuse3 libfuse2 python3-llfuse python3-pyfuse3 -y && echo 'user_allow_other' | sudo tee -a /etc/fuse.conf && sudo chmod 666 /dev/fuse";
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -24,7 +27,7 @@ const FuseSetupModal: React.FC<FuseSetupModalProps> = ({ isOpen, onClose }) => {
                     <div>
                         <h3 className="text-lg font-bold text-slate-900">WSL Configuration Required</h3>
                         <p className="text-sm text-slate-600 mt-2 leading-relaxed">
-                            Borg requires <strong>FUSE 3</strong> to mount archives on this system. The error <code>fusermount3: not found</code> indicates this is missing.
+                            To allow Windows Explorer to access the mounted archive, we need to enable <code>allow_other</code> in WSL FUSE settings.
                         </p>
                     </div>
                 </div>
@@ -45,6 +48,10 @@ const FuseSetupModal: React.FC<FuseSetupModalProps> = ({ isOpen, onClose }) => {
                         <Copy className="w-4 h-4" />
                     </button>
                 </div>
+                
+                <p className="text-xs text-slate-500 mt-4 italic border-t border-slate-100 pt-3">
+                    This is a one-time setup. If you already installed packages, this command ensures the permission config is correct.
+                </p>
             </div>
             
             <div className="bg-gray-50 px-6 py-4 border-t border-gray-100 flex justify-end">

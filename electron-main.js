@@ -214,11 +214,12 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
     if (useWsl) {
         const mountPoint = args[args.length - 1]; 
         try {
-            console.log(`[Borg Mount] Creating directory: ${mountPoint}`);
-            require('child_process').execSync(`wsl --exec mkdir -p "${mountPoint}"`);
+            console.log(`[Borg Mount] Creating directory and fixing permissions: ${mountPoint}`);
+            // Fix permissions: chmod 777 ensures the folder is accessible by "other" (Windows) before mounting
+            require('child_process').execSync(`wsl --exec sh -c "mkdir -p '${mountPoint}' && chmod 777 '${mountPoint}'"`);
         } catch(e) { 
             console.error(`[Borg Mount] Failed to create directory ${mountPoint}`, e.message);
-            if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: `FATAL ERROR: Failed to create mountpoint ${mountPoint}.` });
+            if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: `FATAL ERROR: Failed to create/chmod mountpoint ${mountPoint}.` });
             return resolve({ success: false, error: "MKDIR_FAILED" });
         }
 
@@ -251,6 +252,12 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
           if (text.includes('no FUSE support') || text.includes('fusermount3')) {
               fuseError = true;
               const hint = `\n[WinBorg Hint] 🔴 FUSE Missing or Incomplete!`;
+              if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: hint });
+          }
+
+          if (text.includes('user_allow_other')) {
+              fuseError = true;
+              const hint = `\n[WinBorg Hint] 🔴 'user_allow_other' not in /etc/fuse.conf! Run the setup command.`;
               if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: hint });
           }
           
