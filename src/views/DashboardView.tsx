@@ -202,13 +202,13 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMou
                                                     <div className="flex justify-between items-center">
                                                         <span className="text-[10px] text-blue-600 font-medium flex items-center gap-1">
                                                             <Loader2 className="w-3 h-3 animate-spin" /> 
-                                                            Checking... {repo.checkProgress ? `${Math.round(repo.checkProgress)}%` : ''}
+                                                            Checking... {typeof repo.checkProgress === 'number' ? `${Math.round(repo.checkProgress)}%` : '0%'}
                                                         </span>
                                                     </div>
                                                     <div className="h-1.5 w-full bg-blue-100 rounded-full overflow-hidden">
                                                         <div 
                                                             className="h-full bg-blue-500 rounded-full transition-all duration-300" 
-                                                            style={{ width: `${repo.checkProgress || 5}%` }}
+                                                            style={{ width: `${repo.checkProgress || 0}%` }}
                                                         ></div>
                                                     </div>
                                                 </div>

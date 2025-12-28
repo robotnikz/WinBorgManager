@@ -296,10 +296,13 @@ const App: React.FC = () => {
 
       const progressCallback = (log: string) => {
          // Attempt to parse percentage from Borg output
-         // Examples: "12.5% ..." or "50%"
-         const match = log.match(/(\d+\.\d+|\d+)%/);
-         if (match) {
-             const progress = parseFloat(match[1]);
+         // Example chunks: "12.5% ..." or multiple in one line like "1%\r2%\r3%"
+         // We find ALL matches and take the last one to be most current
+         const matches = [...log.matchAll(/(\d+\.\d+|\d+)%/g)];
+         
+         if (matches.length > 0) {
+             const lastMatch = matches[matches.length - 1];
+             const progress = parseFloat(lastMatch[1]);
              if (!isNaN(progress)) {
                  setRepos(prev => prev.map(r => 
                      r.id === repo.id ? { ...r, checkProgress: progress } : r
