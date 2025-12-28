@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { MountPoint, Repository, Archive } from '../types';
 import Button from '../components/Button';
@@ -17,6 +16,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
   const [isCreating, setIsCreating] = useState(false);
   const [selectedRepo, setSelectedRepo] = useState(repos[0]?.id || '');
   const [selectedArchive, setSelectedArchive] = useState(archives[0]?.name || '');
+  const [commandPreview, setCommandPreview] = useState('');
   
   // ALWAYS DEFAULT TO TRUE FOR WSL AS REQUESTED
   const [useWsl, setUseWsl] = useState(true);
@@ -42,6 +42,22 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
         setSelectedArchive(archives[0].name);
      }
   }, [repos, archives, selectedRepo, selectedArchive, preselectedRepoId]);
+
+  // Effect to generate command preview locally (No AI needed)
+  useEffect(() => {
+    if (isCreating) {
+      const repo = repos.find(r => r.id === selectedRepo);
+      if (repo) {
+        // Internal Linux Path logic for preview
+        const archiveNameClean = selectedArchive.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const internalPath = `/mnt/wsl/winborg/${archiveNameClean}`;
+        
+        // Simple command construction
+        const cmd = `borg mount -o allow_other ${repo.url}::${selectedArchive} ${internalPath}`;
+        setCommandPreview(cmd);
+      }
+    }
+  }, [isCreating, selectedRepo, selectedArchive, repos]);
 
   const handleMount = () => {
     // FORCE PATH LOGIC:
@@ -112,7 +128,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
                 {useWsl && <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded">WSL Mode Active</span>}
            </div>
            
-           {/* 2 Column Grid - No Drive Selection anymore */}
+           {/* 2 Column Grid */}
            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
              <div>
                <label className="block text-xs font-medium text-slate-500 mb-1">Repository</label>
@@ -152,6 +168,15 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
                    <div className="mb-1"><strong>Mount Point (Linux):</strong> {internalPath}</div>
                    <div><strong>Windows Explorer:</strong> {explorerPathHint}</div>
                </div>
+           </div>
+           
+           {/* Command Preview Box */}
+           <div className="mt-2 bg-slate-900 rounded-md p-3 font-mono text-xs text-green-400 overflow-x-auto">
+              <div className="flex items-center gap-2 mb-2 text-slate-400 border-b border-slate-700 pb-1">
+                 <Terminal className="w-3 h-3" />
+                 <span>Command Preview</span>
+              </div>
+              {commandPreview}
            </div>
 
            <div className="flex justify-end pt-2">

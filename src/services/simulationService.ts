@@ -1,1 +1,0 @@
-// This file has been removed because simulation services are no longer used.
