@@ -60,7 +60,7 @@ const SettingsView: React.FC = () => {
                 How to get Borg on Windows 11
             </h3>
             <p className="text-slate-600">
-                Official standalone binaries are scarce for recent versions. We recommend using a package manager.
+                The <code>borgbackup</code> package lives in the Scoop 'extras' bucket. You must add it first.
             </p>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -69,10 +69,16 @@ const SettingsView: React.FC = () => {
                         Option A: Scoop (Recommended)
                         <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Best</span>
                     </div>
-                    <code className="block bg-slate-900 text-green-400 p-2 rounded text-xs font-mono mb-2">
-                        scoop install borgbackup
-                    </code>
-                    <p className="text-xs text-slate-500">Installs a shim automatically added to your PATH.</p>
+                    <div className="bg-slate-900 rounded p-2 mb-2 font-mono text-xs">
+                        <div className="text-slate-500 mb-1 select-none"># 1. Add extras bucket</div>
+                        <code className="block text-yellow-400 mb-3 select-all">
+                            scoop bucket add extras
+                        </code>
+                        <div className="text-slate-500 mb-1 select-none"># 2. Install borg</div>
+                        <code className="block text-green-400 select-all">
+                            scoop install borgbackup
+                        </code>
+                    </div>
                 </div>
 
                 <div className="bg-white p-3 rounded border border-gray-200 shadow-sm">
