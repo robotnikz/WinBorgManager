@@ -10,10 +10,11 @@ interface RepositoriesViewProps {
   onEditRepo: (id: string, repoData: { name: string; url: string; encryption: 'repokey' | 'keyfile' | 'none', passphrase?: string, trustHost?: boolean }) => void;
   onConnect: (repo: Repository) => void;
   onMount: (repo: Repository) => void;
+  onCheck: (repo: Repository) => void;
   onDelete: (repoId: string) => void;
 }
 
-const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, onEditRepo, onConnect, onMount, onDelete }) => {
+const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, onEditRepo, onConnect, onMount, onCheck, onDelete }) => {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRepoId, setEditingRepoId] = useState<string | null>(null);
@@ -218,6 +219,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
             repo={repo} 
             onConnect={onConnect}
             onMount={onMount}
+            onCheck={onCheck}
             onDelete={() => onDelete(repo.id)}
             onEdit={handleOpenEdit}
           />

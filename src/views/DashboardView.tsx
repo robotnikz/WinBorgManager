@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { Repository, MountPoint } from '../types';
+import { Repository, MountPoint, View } from '../types';
 import { 
   ShieldCheck, 
   HardDrive, 
@@ -20,10 +20,11 @@ interface DashboardViewProps {
   mounts: MountPoint[];
   onQuickMount: (repo: Repository) => void;
   onConnect: (repo: Repository) => void;
+  onCheck: (repo: Repository) => void;
   onChangeView: (view: any) => void;
 }
 
-const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMount, onConnect, onChangeView }) => {
+const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMount, onConnect, onCheck, onChangeView }) => {
   
   // Calculate Statistics
   const stats = useMemo(() => {
@@ -35,7 +36,6 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMou
     const totalBytes = repos.reduce((acc, repo) => acc + parseSizeString(repo.size), 0);
     
     // Simulate Original Size (Borg usually has 2x-5x deduplication ratio)
-    // In a real app, 'borg info' gives 'All archives: ...' vs 'Deduplicated size'
     // We simulate a 2.4x ratio for the visualization to look like Vorta
     const simulatedOriginalBytes = totalBytes * 2.4; 
     
@@ -53,6 +53,16 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMou
         savingsPercent
     };
   }, [repos, mounts]);
+
+  const handleSmartVerify = () => {
+    if (repos.length === 1 && repos[0].status === 'connected') {
+        // If only one connected repo, run check immediately
+        onCheck(repos[0]);
+    } else {
+        // Otherwise go to list to select
+        onChangeView(View.REPOSITORIES);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
@@ -218,7 +228,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMou
                 <h3 className="font-semibold mb-4">Quick Actions</h3>
                 <div className="space-y-3">
                     <button 
-                        onClick={() => onChangeView('REPOSITORIES')}
+                        onClick={() => onChangeView(View.REPOSITORIES)}
                         className="w-full text-left px-4 py-3 bg-white/10 hover:bg-white/20 rounded-lg transition-colors flex items-center gap-3 border border-white/5"
                     >
                         <Server className="w-5 h-5 text-blue-300" />
@@ -228,7 +238,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMou
                         </div>
                     </button>
                     <button 
-                         onClick={() => onChangeView('REPOSITORIES')}
+                         onClick={handleSmartVerify}
                          className="w-full text-left px-4 py-3 bg-white/10 hover:bg-white/20 rounded-lg transition-colors flex items-center gap-3 border border-white/5"
                     >
                         <AlertTriangle className="w-5 h-5 text-yellow-300" />
@@ -263,14 +273,11 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMou
                         desc="Local NAS (Timeout)"
                         time="1 day ago"
                     />
-                    <ActivityItem 
-                        status="success"
-                        title="Integrity Check"
-                        desc="No corruption found"
-                        time="2 days ago"
-                    />
                 </div>
-                <button className="w-full mt-6 text-xs font-medium text-slate-500 hover:text-blue-600 transition-colors">
+                <button 
+                    onClick={() => onChangeView(View.ACTIVITY)}
+                    className="w-full mt-6 text-xs font-medium text-slate-500 hover:text-blue-600 transition-colors"
+                >
                     View Full Logs
                 </button>
             </div>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Repository } from '../types';
-import { Server, Shield, Clock, HardDrive, Trash2, Loader2, Edit2 } from 'lucide-react';
+import { Server, Shield, Clock, HardDrive, Trash2, Loader2, Edit2, ShieldCheck } from 'lucide-react';
 
 interface RepoCardProps {
   repo: Repository;
@@ -8,9 +8,10 @@ interface RepoCardProps {
   onConnect?: (repo: Repository) => void;
   onDelete?: (repo: Repository) => void;
   onEdit?: (repo: Repository) => void;
+  onCheck?: (repo: Repository) => void;
 }
 
-const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete, onEdit }) => {
+const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete, onEdit, onCheck }) => {
   return (
     <div className="bg-white rounded-xl border border-gray-200/75 p-5 shadow-sm hover:shadow-md transition-all duration-200 group">
       <div className="flex justify-between items-start mb-4">
@@ -72,21 +73,32 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
         </div>
       </div>
 
-      <div className="flex gap-2 mt-2">
-         <button 
-           onClick={() => onConnect?.(repo)}
-           disabled={repo.status === 'connecting'}
-           className="flex-1 px-3 py-2 text-xs font-medium bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md text-slate-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-         >
-           {repo.status === 'connecting' ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-           {repo.status === 'connected' ? 'Refresh Connection' : 'Connect'}
-         </button>
-         {repo.status === 'connected' && (
+      <div className="flex flex-col gap-2 mt-2">
+         <div className="flex gap-2">
             <button 
-              onClick={() => onMount?.(repo)}
-              className="flex-1 px-3 py-2 text-xs font-medium bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md text-blue-700 transition-colors"
+              onClick={() => onConnect?.(repo)}
+              disabled={repo.status === 'connecting'}
+              className="flex-1 px-3 py-2 text-xs font-medium bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md text-slate-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              Mount
+              {repo.status === 'connecting' ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+              {repo.status === 'connected' ? 'Refresh' : 'Connect'}
+            </button>
+            {repo.status === 'connected' && (
+                <button 
+                  onClick={() => onMount?.(repo)}
+                  className="flex-1 px-3 py-2 text-xs font-medium bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md text-blue-700 transition-colors"
+                >
+                  Mount
+                </button>
+            )}
+         </div>
+         
+         {onCheck && repo.status === 'connected' && (
+            <button 
+               onClick={() => onCheck(repo)}
+               className="w-full px-3 py-1.5 text-[10px] font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-transparent hover:border-slate-200 rounded-md transition-colors flex items-center justify-center gap-2"
+            >
+               <ShieldCheck className="w-3 h-3" /> Verify Integrity
             </button>
          )}
       </div>

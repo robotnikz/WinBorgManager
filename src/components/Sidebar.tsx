@@ -1,5 +1,5 @@
 import React from 'react';
-import { HardDrive, Server, Settings, Save, LayoutDashboard, Database } from 'lucide-react';
+import { HardDrive, Server, Settings, Save, LayoutDashboard, Database, Activity } from 'lucide-react';
 import { View } from '../types';
 
 interface SidebarProps {
@@ -13,6 +13,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) => {
     { view: View.REPOSITORIES, label: 'Repositories', icon: Server },
     { view: View.ARCHIVES, label: 'Archives', icon: Database },
     { view: View.MOUNTS, label: 'Mounts', icon: HardDrive },
+    { view: View.ACTIVITY, label: 'Activity', icon: Activity },
   ];
 
   return (

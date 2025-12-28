@@ -4,7 +4,8 @@ export enum View {
   REPOSITORIES = 'REPOSITORIES',
   MOUNTS = 'MOUNTS',
   ARCHIVES = 'ARCHIVES',
-  SETTINGS = 'SETTINGS'
+  SETTINGS = 'SETTINGS',
+  ACTIVITY = 'ACTIVITY'
 }
 
 export interface Repository {

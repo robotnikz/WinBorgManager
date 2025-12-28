@@ -5,6 +5,7 @@ import RepositoriesView from './views/RepositoriesView';
 import MountsView from './views/MountsView';
 import SettingsView from './views/SettingsView';
 import DashboardView from './views/DashboardView';
+import ActivityView from './views/ActivityView';
 import TerminalModal from './components/TerminalModal';
 import FuseSetupModal from './components/FuseSetupModal';
 import { View, Repository, MountPoint, Archive } from './types';
@@ -237,6 +238,17 @@ const App: React.FC = () => {
     );
   };
 
+  const handleCheckIntegrity = (repo: Repository) => {
+      runCommand(
+          `Verifying Integrity: ${repo.name}`,
+          ['check', '--info', '--progress', repo.url],
+          (output) => {
+              // We don't parse output here, the user sees the terminal
+          },
+          { passphrase: repo.passphrase, disableHostCheck: repo.trustHost }
+      );
+  };
+
   /**
    * New Quick Mount: 
    * Instead of blindly mounting 'latest', we open the Mount UI 
@@ -304,6 +316,7 @@ const App: React.FC = () => {
             onEditRepo={handleEditRepo}
             onConnect={handleConnect}
             onMount={handleQuickMount}
+            onCheck={handleCheckIntegrity}
             onDelete={handleDeleteRepo}
           />
         );
@@ -320,6 +333,8 @@ const App: React.FC = () => {
         );
       case View.SETTINGS:
         return <SettingsView />;
+      case View.ACTIVITY:
+        return <ActivityView />;
       case View.DASHBOARD:
       default:
         return (
@@ -328,6 +343,7 @@ const App: React.FC = () => {
               mounts={mounts}
               onQuickMount={handleQuickMount}
               onConnect={handleConnect}
+              onCheck={handleCheckIntegrity}
               onChangeView={setCurrentView}
            />
         );
