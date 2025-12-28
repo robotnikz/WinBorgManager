@@ -27,9 +27,10 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
      const wslEnabled = localStorage.getItem('winborg_use_wsl') === 'true';
      setUseWsl(wslEnabled);
      
-     // USER REQUEST: Always use fixed path /mnt/winborg
-     // The backend will automatically run 'mkdir -p' for this path before mounting.
-     setMountPath(wslEnabled ? `/mnt/winborg` : 'Z:');
+     // USER REQUEST: Always use fixed path
+     // We use /mnt/wsl/winborg because /mnt is often root-owned and read-only for users.
+     // /mnt/wsl is a tmpfs intended for sharing and is writable.
+     setMountPath(wslEnabled ? `/mnt/wsl/winborg` : 'Z:');
 
      // Handle Preselection from other views
      if (preselectedRepoId) {
@@ -56,7 +57,11 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
   const handleOpenFolder = (path: string) => {
     // Basic heuristics: if it looks like a Linux path, try to open via \\wsl$
     if (path.startsWith('/')) {
-        alert(`Access this in Windows Explorer via: \\\\wsl$\\Ubuntu${path.replace(/\//g, '\\')}`);
+        // Convert linux path to UNC path for Windows Explorer
+        // e.g. /mnt/wsl/winborg -> \\wsl$\Ubuntu\mnt\wsl\winborg
+        // Note: We don't know the exact distro name easily here, defaulting to wsl$ (default distro)
+        const uncPath = `\\\\wsl.localhost\\Ubuntu${path.replace(/\//g, '\\')}`;
+        alert(`Opening in Explorer: ${uncPath}\n\n(If this fails, open Explorer and type \\\\wsl$)`);
     } else {
         // Windows drive
         alert(`Opening ${path}`);
@@ -123,7 +128,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
                       className="w-full p-2 bg-white border border-gray-200 rounded-md text-sm text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                       value={mountPath}
                       onChange={(e) => setMountPath(e.target.value)}
-                      placeholder="/mnt/winborg"
+                      placeholder="/mnt/wsl/winborg"
                    />
                ) : (
                    <select 
@@ -134,7 +139,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
                      {drives.map(l => <option key={l} value={l}>{l}</option>)}
                    </select>
                )}
-               {useWsl && <p className="text-[10px] text-slate-400 mt-1">Directory inside your WSL distro (auto-created)</p>}
+               {useWsl && <p className="text-[10px] text-slate-400 mt-1">Recommended: <code>/mnt/wsl/winborg</code> (Always writable)</p>}
              </div>
            </div>
 

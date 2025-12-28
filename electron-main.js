@@ -117,6 +117,14 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
         child.stderr.on('data', (data) => {
           const text = data.toString();
           console.error(`[Borg STDERR] ${text.trim()}`); // Log to terminal for debugging
+          
+          // WINBORG UX: Filter SSH warnings that scare users but are harmless
+          if (text.includes("Permanently added") || text.includes("known hosts")) {
+             // Optional: Don't send to frontend or send as info
+             // For now we still send it but maybe we can color it gray in frontend?
+             // Just pass it through.
+          }
+          
           if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: text });
 
           // WINBORG UX IMPROVEMENT: Detect common "command not found" errors
@@ -173,9 +181,15 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
     
     if (useWsl) {
         const mountPoint = args[args.length - 1]; 
+        // Improved Directory Creation:
+        // Use wsl --exec mkdir -p ... to ensuring linux command runs
         try {
-            require('child_process').execSync(`wsl mkdir -p ${mountPoint}`);
-        } catch(e) { /* ignore */ }
+            console.log(`[Borg Mount] Creating directory: ${mountPoint}`);
+            require('child_process').execSync(`wsl --exec mkdir -p "${mountPoint}"`);
+        } catch(e) { 
+            console.error(`[Borg Mount] Failed to create directory ${mountPoint}`, e.message);
+            if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: `Warning: Failed to create ${mountPoint}. It might require sudo or already exist with bad permissions.` });
+        }
 
         bin = 'wsl';
         finalArgs = ['--exec', 'borg', ...args];
@@ -212,6 +226,13 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
                            `Borg needs FUSE 3 to mount archives.\n` +
                            `FIX: Run this in WSL: sudo apt install fuse3 libfuse2 python3-llfuse python3-pyfuse3 -y`;
               if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: hint });
+          }
+          
+          if (text.includes('Mountpoint must be a writable directory')) {
+               const hint = `\n[WinBorg Hint] 🚫 Permission Error\n` +
+                           `The folder '${args[args.length - 1]}' exists but you cannot write to it.\n` +
+                           `Solution: Use a path in your home directory (like ~/winborg) or /mnt/wsl/...`;
+               if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: hint });
           }
         });
 
