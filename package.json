@@ -4,7 +4,7 @@
   "productName": "WinBorg Manager",
   "version": "1.0.0",
   "description": "A Windows 11-styled interface for managing BorgBackup repositories via WSL.",
-  "author": "WinBorg User",
+  "author": "robotnikz",
   "main": "electron-main.js",
   "private": true,
   "scripts": {
