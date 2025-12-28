@@ -4,7 +4,7 @@ import { User, Save, Terminal, Shield, Check, Key, AlertTriangle, ExternalLink, 
 import { borgService } from '../services/borgService';
 
 const SettingsView: React.FC = () => {
-  const [useWsl, setUseWsl] = useState(false);
+  const [useWsl, setUseWsl] = useState(true); // Default True
   const [borgPath, setBorgPath] = useState('borg');
   const [borgPassphrase, setBorgPassphrase] = useState('');
   const [disableHostCheck, setDisableHostCheck] = useState(false);
@@ -18,7 +18,13 @@ const SettingsView: React.FC = () => {
     const storedPass = localStorage.getItem('winborg_passphrase');
     const storedHostCheck = localStorage.getItem('winborg_disable_host_check');
     
-    if (storedWsl) setUseWsl(storedWsl === 'true');
+    // Smart Default: If null, use TRUE. If string present, parse it.
+    if (storedWsl === null) {
+        setUseWsl(true);
+    } else {
+        setUseWsl(storedWsl === 'true');
+    }
+
     if (storedPath) setBorgPath(storedPath);
     if (storedPass) setBorgPassphrase(storedPass);
     if (storedHostCheck) setDisableHostCheck(storedHostCheck === 'true');
@@ -36,6 +42,10 @@ const SettingsView: React.FC = () => {
   const handleTest = async () => {
     setTestStatus('loading');
     setTestOutput('');
+    
+    // We run 'borg --version'. 
+    // If WSL is checked, this runs 'wsl --exec borg --version'
+    // If Native, runs 'borg --version'
     const success = await borgService.runCommand(['--version'], (log) => {
         console.log(log);
         setTestOutput(prev => prev + log);
@@ -61,10 +71,10 @@ const SettingsView: React.FC = () => {
             <div>
                 <div className="flex items-center gap-2">
                     <span className="font-semibold text-slate-900">Use Windows Subsystem for Linux (WSL)</span>
-                    <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">RECOMMENDED</span>
+                    <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">ACTIVE</span>
                 </div>
                 <p className="text-xs text-slate-500 max-w-md mt-1">
-                    Runs Borg inside your default Linux distribution instead of using Windows binaries. More stable and supports FUSE mounts better.
+                    Runs Borg inside your default Linux distribution (e.g. Ubuntu). This is the recommended way to use Borg on Windows.
                 </p>
             </div>
             <div className="relative inline-block w-12 h-6 transition duration-200 ease-in-out">
@@ -84,14 +94,13 @@ const SettingsView: React.FC = () => {
         <div className="bg-blue-50 border border-blue-100 rounded-lg p-5 mb-6 text-sm text-slate-700 space-y-4">
             <h3 className="font-semibold text-blue-900 flex items-center gap-2">
                 <Info className="w-4 h-4 text-blue-500" /> 
-                {useWsl ? 'Setup Guide: WSL' : 'Setup Guide: Windows Native'}
+                {useWsl ? 'Environment: WSL (Ubuntu/Linux)' : 'Environment: Windows Native (Powershell)'}
             </h3>
             
             {useWsl ? (
                 <div className="space-y-3">
-                    <p className="text-xs">1. Open PowerShell as Admin and run <code>wsl --install</code>, then restart PC if needed.</p>
-                    <p className="text-xs">2. Open "Ubuntu" (or your distro) from Start menu.</p>
-                    <p className="text-xs">3. Run this command inside Ubuntu to install Borg:</p>
+                    <p className="text-xs">WinBorg will execute commands via <code>wsl --exec borg ...</code>.</p>
+                    <p className="text-xs">Ensure Borg is installed in your default distro:</p>
                     <div className="bg-slate-900 rounded p-3 font-mono text-xs">
                         <code className="block text-green-400 select-all cursor-pointer" onClick={() => navigator.clipboard.writeText('sudo apt update && sudo apt install borgbackup fuse -y')}>
                             sudo apt update && sudo apt install borgbackup fuse -y
@@ -101,10 +110,9 @@ const SettingsView: React.FC = () => {
                 </div>
             ) : (
                 <div className="space-y-3">
-                     <p className="text-xs font-semibold">Requirement: Borg must be installed on Windows.</p>
+                     <p className="text-xs font-semibold text-red-500">Warning: Borg binaries for Windows are experimental.</p>
                      <p className="text-xs">The easiest way is using <a href="https://scoop.sh" target="_blank" className="underline text-blue-600">Scoop</a>.</p>
                      <div className="bg-slate-900 rounded p-3 font-mono text-xs text-yellow-400">
-                        <div className="mb-2 text-slate-400"># Run in PowerShell:</div>
                         <code className="block select-all cursor-pointer" onClick={() => navigator.clipboard.writeText('scoop bucket add extras && scoop install borgbackup')}>
                             scoop bucket add extras<br/>scoop install borgbackup
                         </code>

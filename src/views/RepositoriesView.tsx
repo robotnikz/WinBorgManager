@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Repository } from '../types';
 import RepoCard from '../components/RepoCard';
 import Button from '../components/Button';
-import { Plus, Search, X, ShieldAlert, Key } from 'lucide-react';
+import { Plus, Search, X, ShieldAlert, Key, Terminal } from 'lucide-react';
 
 interface RepositoriesViewProps {
   repos: Repository[];
@@ -15,6 +15,8 @@ interface RepositoriesViewProps {
 const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, onConnect, onMount, onDelete }) => {
   const [search, setSearch] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [useWsl, setUseWsl] = useState(true);
+  
   const [newRepo, setNewRepo] = useState<{
     name: string;
     url: string;
@@ -28,6 +30,14 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
     passphrase: '',
     trustHost: false
   });
+
+  // Check backend mode when modal opens
+  useEffect(() => {
+    if (isAdding) {
+        const storedWsl = localStorage.getItem('winborg_use_wsl');
+        setUseWsl(storedWsl === null ? true : storedWsl === 'true');
+    }
+  }, [isAdding]);
 
   const handleSave = () => {
     if (newRepo.name && newRepo.url) {
@@ -56,6 +66,23 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
              </div>
              
              <div className="p-6 space-y-4">
+               {/* Backend Indicator */}
+               <div className="flex items-center gap-2 text-xs bg-slate-100 p-2 rounded text-slate-600 border border-slate-200">
+                   <Terminal className="w-3 h-3" />
+                   <span>Backend: <strong>{useWsl ? "WSL (Ubuntu/Linux)" : "Windows Native"}</strong></span>
+                   <button 
+                    onClick={() => {
+                        // Allow quick toggle for troubleshooting
+                        const newVal = !useWsl;
+                        setUseWsl(newVal);
+                        localStorage.setItem('winborg_use_wsl', String(newVal));
+                    }}
+                    className="ml-auto text-blue-600 hover:underline"
+                   >
+                       Change
+                   </button>
+               </div>
+
                <div>
                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Name</label>
                  <input 

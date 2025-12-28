@@ -4,8 +4,14 @@
 const { ipcRenderer } = (window as any).require('electron');
 
 const getBorgConfig = () => {
+    // WSL DEFAULT STRATEGY:
+    // We check if the user has explicitly set 'false'. 
+    // If the setting is missing (null), we default to TRUE (prefer WSL).
+    const storedWsl = localStorage.getItem('winborg_use_wsl');
+    const useWsl = storedWsl === null ? true : storedWsl === 'true';
+
     return {
-        useWsl: localStorage.getItem('winborg_use_wsl') === 'true',
+        useWsl: useWsl,
         path: localStorage.getItem('winborg_executable_path') || 'borg',
         passphrase: localStorage.getItem('winborg_passphrase') || '',
         disableHostCheck: localStorage.getItem('winborg_disable_host_check') === 'true'
@@ -30,6 +36,7 @@ const getEnvVars = (config: any, overrides?: { passphrase?: string, disableHostC
         env.WSLENV = 'BORG_PASSPHRASE/u:BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK/u:BORG_RELOCATED_REPO_ACCESS_IS_OK/u';
         
         if (finalDisableHostCheck) {
+           // We pass the SSH command as an environment variable to Borg inside WSL
            env.BORG_RSH = 'ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null';
            env.WSLENV += ':BORG_RSH/u';
         }
