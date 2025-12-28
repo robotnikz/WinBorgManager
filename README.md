@@ -1,9 +1,10 @@
-
 # WinBorg Manager
 
 **A modern, Windows 11-styled GUI for BorgBackup.**
 
 WinBorg Manager bridges the gap between the powerful deduplicating backup tool **BorgBackup** and the **Windows** desktop experience. It leverages the **Windows Subsystem for Linux (WSL)** to run Borg natively while providing a seamless, beautiful user interface to manage repositories, create archives, and—most importantly—mount backups directly into Windows Explorer.
+
+![WinBorg Dashboard Screenshot](path/to/screenshot.png) *<!-- Don't forget to add a screenshot here later -->*
 
 ## 🚀 Features
 
@@ -84,7 +85,7 @@ This is where the magic happens. When you mount an archive:
 2.  You will see your active mount.
 3.  Click the **Open** button.
 4.  **Windows Explorer** will open directly into the backup.
-    *   *Technical Detail:* The path is located at `\\wsl.localhost\Ubuntu\mnt\wsl\winborg\<archive_name>`.
+    *   *Technical Detail:* The path is usually located at `\\wsl.localhost\Ubuntu\mnt\wsl\winborg\<archive_name>`.
 5.  You can copy/paste files out of the backup just like a normal folder.
 6.  **Important:** When finished, click **Unmount** to release the connection.
 
@@ -127,8 +128,3 @@ npm install
 
 # Run React Frontend + Electron Backend
 npm run electron
-```
-
-## 📄 License
-
-MIT License. See [LICENSE](LICENSE) file for details.
