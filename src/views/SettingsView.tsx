@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Button from '../components/Button';
-import { User, Save, Terminal, Shield, Check, Key, AlertTriangle, ExternalLink, RefreshCw, Network, Info } from 'lucide-react';
+import { Save, Terminal, Key, Check, Network, Info } from 'lucide-react';
 import { borgService } from '../services/borgService';
 
 const SettingsView: React.FC = () => {
