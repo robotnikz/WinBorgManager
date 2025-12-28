@@ -121,7 +121,7 @@ If you want to contribute to WinBorg:
 
 ```bash
 # Clone the repo
-git clone https://github.com/yourname/winborg-manager.git
+git clone https://github.com/robotnikz/WinBorg.git
 
 # Install dependencies
 npm install
