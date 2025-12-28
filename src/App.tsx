@@ -16,13 +16,32 @@ import { borgService } from './services/borgService';
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
   
-  // LOGIC FIX: Persistence for Repos
+  // LOGIC FIX: Persistence for Repos WITH SANITIZATION
+  // This ensures that after a restart, we don't show "Running" or "Connected" 
+  // for processes that are actually dead.
   const [repos, setRepos] = useState<Repository[]>(() => {
     const isInitialized = localStorage.getItem('winborg_initialized');
     const savedRepos = localStorage.getItem('winborg_repos');
 
     if (isInitialized) {
-        return savedRepos ? JSON.parse(savedRepos) : [];
+        if (savedRepos) {
+            try {
+                const parsed = JSON.parse(savedRepos);
+                return parsed.map((r: Repository) => ({
+                    ...r,
+                    // RESET Connection: SSH connections die on app close
+                    status: 'disconnected', 
+                    // RESET Stuck Checks: If it was running during exit, it is dead now.
+                    checkStatus: r.checkStatus === 'running' ? 'idle' : r.checkStatus,
+                    checkProgress: r.checkStatus === 'running' ? undefined : r.checkProgress,
+                    activeCommandId: undefined
+                }));
+            } catch (e) {
+                console.error("Failed to parse repos", e);
+                return [];
+            }
+        }
+        return [];
     } else {
         localStorage.setItem('winborg_initialized', 'true');
         return MOCK_REPOS;
@@ -323,11 +342,7 @@ const App: React.FC = () => {
   };
 
   const handleAbortCheck = async (repo: Repository) => {
-      if (!repo.activeCommandId) return;
-      
-      console.log(`Aborting check for ${repo.name} (ID: ${repo.activeCommandId})`);
-      
-      // Update UI immediately
+      // Force UI cleanup even if ID is missing (fix for zombie states)
       setRepos(prev => prev.map(r => r.id === repo.id ? {
           ...r,
           checkStatus: 'aborted',
@@ -335,8 +350,10 @@ const App: React.FC = () => {
           activeCommandId: undefined
       } : r));
 
-      // Call service to kill process
-      await borgService.stopCommand(repo.activeCommandId);
+      if (repo.activeCommandId) {
+          console.log(`Aborting check for ${repo.name} (ID: ${repo.activeCommandId})`);
+          await borgService.stopCommand(repo.activeCommandId);
+      }
   };
 
   /**
