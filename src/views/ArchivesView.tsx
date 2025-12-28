@@ -2,19 +2,20 @@
 import React, { useState } from 'react';
 import { Archive, Repository } from '../types';
 import Button from '../components/Button';
-import { Database, Clock, HardDrive, Search, Filter, Calendar, RefreshCw, Info, DownloadCloud, Loader2 } from 'lucide-react';
+import { Database, Clock, HardDrive, Search, Filter, Calendar, RefreshCw, Info, DownloadCloud, Loader2, ListChecks } from 'lucide-react';
 
 interface ArchivesViewProps {
   archives: Archive[];
   repos: Repository[];
   onMount: (repo: Repository, archiveName: string) => void;
   onRefresh: () => void;
-  onGetInfo?: (archiveName: string) => void;
+  onGetInfo?: (archiveName: string) => Promise<void>;
 }
 
 const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, onRefresh, onGetInfo }) => {
   const [search, setSearch] = useState('');
   const [loadingInfo, setLoadingInfo] = useState<string | null>(null);
+  const [isFetchingAll, setIsFetchingAll] = useState(false);
   
   // Basic filtering
   const filteredArchives = archives.filter(a => 
@@ -24,13 +25,39 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
   // Helper to find the active connected repo
   const activeRepo = repos.find(r => r.status === 'connected');
 
-  const handleGetInfo = (archiveName: string) => {
+  const handleGetInfo = async (archiveName: string) => {
       setLoadingInfo(archiveName);
       if (onGetInfo) {
-          onGetInfo(archiveName);
-          // Simple timeout to reset loading state if it takes too long or completes
-          setTimeout(() => setLoadingInfo(null), 3000); 
+          await onGetInfo(archiveName);
+          setLoadingInfo(null);
       }
+  };
+
+  const handleFetchAllStats = async () => {
+      if (!onGetInfo || !activeRepo) return;
+      
+      setIsFetchingAll(true);
+      
+      // Only process archives that don't have stats yet to save time
+      const targets = filteredArchives.filter(a => a.size === 'Unknown');
+      
+      // Process sequentially to prevent locking issues or spawning 100 processes
+      for (const archive of targets) {
+          // Check if we should stop (could add an abort controller logic later, simple check for now)
+          if (!activeRepo) break; 
+          
+          setLoadingInfo(archive.name); // Visual feedback on current item
+          try {
+              await onGetInfo(archive.name);
+          } catch (e) {
+              console.error(`Failed to fetch info for ${archive.name}`, e);
+          }
+          // Small breathing room for UI
+          await new Promise(r => setTimeout(r, 200));
+      }
+      
+      setLoadingInfo(null);
+      setIsFetchingAll(false);
   };
 
   return (
@@ -55,11 +82,20 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
                   onChange={(e) => setSearch(e.target.value)}
                 />
             </div>
-            <Button variant="secondary" onClick={onRefresh} title="Refresh Archives List" disabled={!activeRepo}>
-                <RefreshCw className="w-4 h-4" />
+            
+            <Button 
+                variant="secondary" 
+                onClick={handleFetchAllStats} 
+                title="Fetch size & duration for all archives" 
+                disabled={!activeRepo || isFetchingAll || filteredArchives.every(a => a.size !== 'Unknown')}
+                className={isFetchingAll ? "bg-blue-50 text-blue-600 border-blue-200" : ""}
+            >
+                {isFetchingAll ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <ListChecks className="w-4 h-4 mr-2" />}
+                {isFetchingAll ? "Fetching..." : "Get All Stats"}
             </Button>
-            <Button variant="secondary">
-                <Filter className="w-4 h-4 mr-2" /> Filter
+
+            <Button variant="secondary" onClick={onRefresh} title="Refresh Archives List" disabled={!activeRepo || isFetchingAll}>
+                <RefreshCw className="w-4 h-4" />
             </Button>
         </div>
       </div>
@@ -110,7 +146,7 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
                                         onClick={() => handleGetInfo(archive.name)}
                                         className="text-blue-500 hover:text-blue-700 flex items-center gap-1 text-xs bg-blue-50 px-2 py-1 rounded"
                                         title="Click to calculate size"
-                                        disabled={loadingInfo === archive.name}
+                                        disabled={loadingInfo === archive.name || isFetchingAll}
                                     >
                                         {loadingInfo === archive.name ? <Loader2 className="w-3 h-3 animate-spin"/> : <DownloadCloud className="w-3 h-3" />}
                                         Calc
@@ -129,6 +165,7 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
                                     variant="secondary" 
                                     className="opacity-0 group-hover:opacity-100 transition-opacity"
                                     onClick={() => activeRepo && onMount(activeRepo, archive.name)}
+                                    disabled={isFetchingAll}
                                 >
                                     <HardDrive className="w-3 h-3 mr-2" />
                                     Mount

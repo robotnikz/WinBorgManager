@@ -529,7 +529,9 @@ const App: React.FC = () => {
                 onRefresh={handleRefreshArchives}
                 onGetInfo={(archiveName) => {
                     const repo = repos.find(r => r.status === 'connected');
-                    if(repo) handleFetchArchiveStats(repo, archiveName);
+                    // Important: Return the promise so the view can await it
+                    if(repo) return handleFetchArchiveStats(repo, archiveName);
+                    return Promise.resolve();
                 }}
             />
         );
