@@ -12,6 +12,7 @@ export const MOCK_REPOS: Repository[] = [
     size: '1.2 TB',
     fileCount: 450023,
     checkStatus: 'ok',
+    checkProgress: 100,
     lastCheckTime: 'Yesterday'
   },
   {
@@ -24,6 +25,7 @@ export const MOCK_REPOS: Repository[] = [
     size: '450 GB',
     fileCount: 12000,
     checkStatus: 'idle',
+    checkProgress: 0,
     lastCheckTime: 'Never'
   }
 ];

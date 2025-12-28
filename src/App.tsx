@@ -6,6 +6,7 @@ import MountsView from './views/MountsView';
 import SettingsView from './views/SettingsView';
 import DashboardView from './views/DashboardView';
 import ActivityView from './views/ActivityView';
+import ArchivesView from './views/ArchivesView';
 import TerminalModal from './components/TerminalModal';
 import FuseSetupModal from './components/FuseSetupModal';
 import { View, Repository, MountPoint, Archive } from './types';
@@ -239,19 +240,32 @@ const App: React.FC = () => {
   };
 
   /**
-   * Run Integrity Check in BACKGROUND (Non-Blocking)
+   * Run Integrity Check in BACKGROUND (Non-Blocking) with Progress
    */
   const handleCheckIntegrity = async (repo: Repository) => {
-      // 1. Set Status to Running
-      setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, checkStatus: 'running' } : r));
+      // 1. Set Status to Running with 0 progress
+      setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, checkStatus: 'running', checkProgress: 0 } : r));
       
       console.log(`Starting background check for ${repo.name}...`);
 
-      // 2. Run command without modal logic
-      // Note: We ignore specific logs for now, we just care about success code
+      const progressCallback = (log: string) => {
+         // Attempt to parse percentage from Borg output
+         // Examples: "12.5% ..." or "50%"
+         const match = log.match(/(\d+\.\d+|\d+)%/);
+         if (match) {
+             const progress = parseFloat(match[1]);
+             if (!isNaN(progress)) {
+                 setRepos(prev => prev.map(r => 
+                     r.id === repo.id ? { ...r, checkProgress: progress } : r
+                 ));
+             }
+         }
+      };
+
+      // 2. Run command using --progress
       const success = await borgService.runCommand(
-          ['check', repo.url], // removed --info --progress for lighter output
-          (log) => { /* Optional: capture log to file or state if needed later */ },
+          ['check', '--progress', repo.url], 
+          progressCallback,
           { passphrase: repo.passphrase, disableHostCheck: repo.trustHost }
       );
 
@@ -260,6 +274,7 @@ const App: React.FC = () => {
       setRepos(prev => prev.map(r => r.id === repo.id ? { 
           ...r, 
           checkStatus: success ? 'ok' : 'error',
+          checkProgress: success ? 100 : undefined,
           lastCheckTime: timestamp 
       } : r));
   };
@@ -276,6 +291,20 @@ const App: React.FC = () => {
     
     // 2. Trigger connection to refresh archive list
     handleConnect(repo);
+  };
+  
+  // Specific handler for mounting from Archives View (where we already have the archive name)
+  const handleArchiveMount = (repo: Repository, archiveName: string) => {
+      setPreselectedRepoId(repo.id);
+      setCurrentView(View.MOUNTS);
+      // We assume archives are already loaded if we are clicking from Archives view
+      // But triggering connect doesn't hurt to ensure mount view has context
+      if (repo.status !== 'connected') {
+          handleConnect(repo);
+      }
+      // Note: We don't have a way to preselect the archive name in MountsView currently via props only via state
+      // This is a minor limitation, the user will have to pick the archive from the dropdown in MountsView
+      // To fix this, MountsView would need a 'preselectedArchive' prop.
   };
 
   const handleAddRepo = (repoData: { name: string; url: string; encryption: 'repokey' | 'keyfile' | 'none', passphrase?: string, trustHost?: boolean }) => {
@@ -347,6 +376,14 @@ const App: React.FC = () => {
             onMount={handleMount} 
             preselectedRepoId={preselectedRepoId}
           />
+        );
+      case View.ARCHIVES:
+        return (
+            <ArchivesView 
+                archives={archives} 
+                repos={repos} 
+                onMount={handleArchiveMount}
+            />
         );
       case View.SETTINGS:
         return <SettingsView />;

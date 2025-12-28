@@ -187,18 +187,29 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMou
                     ) : (
                         repos.map(repo => (
                             <div key={repo.id} className="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                                <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-4 flex-1">
                                     <div className={`w-2 h-2 rounded-full ${repo.status === 'connected' ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                                    <div>
+                                    <div className="flex-1">
                                         <div className="font-medium text-slate-800">{repo.name}</div>
                                         <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
-                                            <span className="truncate max-w-[200px]">{repo.url}</span>
+                                            <span className="truncate max-w-[150px]">{repo.url}</span>
                                             
                                             {/* Integrity Status Badge */}
                                             {repo.checkStatus === 'running' && (
-                                                <span className="flex items-center gap-1 text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded ml-2">
-                                                    <Loader2 className="w-3 h-3 animate-spin" /> Checking...
-                                                </span>
+                                                <div className="flex flex-col gap-1 ml-2 w-32">
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-[10px] text-blue-600 font-medium flex items-center gap-1">
+                                                            <Loader2 className="w-3 h-3 animate-spin" /> 
+                                                            Checking... {repo.checkProgress ? `${Math.round(repo.checkProgress)}%` : ''}
+                                                        </span>
+                                                    </div>
+                                                    <div className="h-1.5 w-full bg-blue-100 rounded-full overflow-hidden">
+                                                        <div 
+                                                            className="h-full bg-blue-500 rounded-full transition-all duration-300" 
+                                                            style={{ width: `${repo.checkProgress || 5}%` }}
+                                                        ></div>
+                                                    </div>
+                                                </div>
                                             )}
                                             {repo.checkStatus === 'ok' && (
                                                 <span className="flex items-center gap-1 text-green-600 bg-green-50 px-1.5 py-0.5 rounded ml-2" title={`Verified: ${repo.lastCheckTime}`}>
@@ -223,7 +234,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, onQuickMou
                                     <div className="flex gap-2">
                                         {repo.checkStatus === 'running' ? (
                                             <Button size="sm" variant="secondary" disabled>
-                                                Checking...
+                                                Abort
                                             </Button>
                                         ) : (
                                             <>

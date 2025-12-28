@@ -23,6 +23,7 @@ export interface Repository {
   
   // Integrity Check State
   checkStatus?: 'idle' | 'running' | 'ok' | 'error';
+  checkProgress?: number; // 0-100
   lastCheckTime?: string;
 }
 
