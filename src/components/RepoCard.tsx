@@ -18,23 +18,23 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
     <div className="bg-white rounded-xl border border-gray-200/75 p-5 shadow-sm hover:shadow-md transition-all duration-200 group relative overflow-hidden">
       
       {/* Top Row: Icon + Name + Unified Toolbar */}
-      <div className="flex justify-between items-start mb-5">
+      <div className="flex justify-between items-start mb-5 gap-3">
         
-        {/* Left: Icon & Title */}
-        <div className="flex items-center gap-3.5">
-          <div className={`p-3 rounded-xl transition-colors ${
+        {/* Left: Icon & Title - Added min-w-0 to allow truncation in flex child */}
+        <div className="flex items-center gap-3.5 min-w-0">
+          <div className={`p-3 rounded-xl transition-colors shrink-0 ${
             repo.status === 'connected' ? 'bg-blue-600 text-white shadow-md shadow-blue-200' : 'bg-gray-100 text-gray-500'
           }`}>
             <Server className="w-5 h-5" />
           </div>
-          <div>
-            <h3 className="font-bold text-slate-800 text-base">{repo.name}</h3>
-            <p className="text-xs text-slate-500 truncate max-w-[180px] font-mono opacity-80">{repo.url}</p>
+          <div className="min-w-0">
+            <h3 className="font-bold text-slate-800 text-base truncate pr-2" title={repo.name}>{repo.name}</h3>
+            <p className="text-xs text-slate-500 truncate font-mono opacity-80" title={repo.url}>{repo.url}</p>
           </div>
         </div>
         
-        {/* Right: Unified Control Pill */}
-        <div className="flex items-center bg-white border border-gray-200 rounded-lg p-1 shadow-sm gap-1">
+        {/* Right: Unified Control Pill - Added shrink-0 to prevent compression */}
+        <div className="flex items-center bg-white border border-gray-200 rounded-lg p-1 shadow-sm gap-1 shrink-0 ml-auto">
             
             {/* Status Section */}
             <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
@@ -47,7 +47,9 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
                      repo.status === 'connecting' ? 'bg-blue-500 animate-pulse' :
                      'bg-slate-400'
                 }`} />
-                {repo.status === 'connected' ? 'Active' : repo.status === 'connecting' ? 'Connecting' : 'Offline'}
+                <span className="hidden sm:inline">{repo.status === 'connected' ? 'Active' : repo.status === 'connecting' ? 'Connecting' : 'Offline'}</span>
+                {/* Mobile text fallback */}
+                <span className="sm:hidden">{repo.status === 'connected' ? 'ON' : 'OFF'}</span>
             </div>
 
             {/* Divider */}
@@ -81,16 +83,16 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
       {/* Info Grid */}
       <div className="grid grid-cols-2 gap-y-3 gap-x-4 mb-5 p-3 bg-slate-50/50 rounded-lg border border-slate-100/50">
         <div className="flex items-center gap-2.5 text-xs text-slate-600">
-          <Clock className="w-3.5 h-3.5 text-slate-400" />
+          <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
           <span className="truncate">{repo.lastBackup}</span>
         </div>
         <div className="flex items-center gap-2.5 text-xs text-slate-600">
-          <HardDrive className="w-3.5 h-3.5 text-slate-400" />
-          <span className="font-medium">{repo.size}</span>
+          <HardDrive className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          <span className="font-medium truncate">{repo.size}</span>
         </div>
         <div className="flex items-center gap-2.5 text-xs text-slate-600 col-span-2">
-          <Shield className="w-3.5 h-3.5 text-slate-400" />
-          <span className="capitalize">{repo.encryption === 'none' ? 'No Encryption' : `${repo.encryption} encryption`}</span>
+          <Shield className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          <span className="capitalize truncate">{repo.encryption === 'none' ? 'No Encryption' : `${repo.encryption} encryption`}</span>
         </div>
       </div>
 
