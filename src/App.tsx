@@ -54,9 +54,10 @@ const App: React.FC = () => {
 
     let fullOutput = '';
     const success = await borgService.runCommand(args, (log) => {
-        const cleanLog = log.trim();
-        setTerminalLogs(prev => [...prev, cleanLog]);
-        fullOutput += cleanLog;
+        // IMPORTANT: Do NOT trim aggressively on every chunk, it merges words/json tokens incorrectly.
+        // Just append raw log to buffer for parsing, but trim for display.
+        setTerminalLogs(prev => [...prev, log.trimEnd()]); 
+        fullOutput += log;
     }, overrides);
 
     setIsProcessing(false);
@@ -107,7 +108,7 @@ const App: React.FC = () => {
     const drive = driveLetters.find(d => !usedDrives.includes(d)) || 'Z:';
     
     const isWsl = localStorage.getItem('winborg_use_wsl') === 'true';
-    const mountPath = isWsl ? `/mnt/wsl/borg-${repo.name.replace(/\s+/g, '-')}` : drive;
+    const mountPath = isWsl ? `/mnt/wsl/borg-${repo.name.replace(/\s+/g, '-')}-${Math.floor(Math.random()*1000)}` : drive;
 
     handleMount(repo.id, latestArchive, mountPath);
   };
@@ -127,6 +128,16 @@ const App: React.FC = () => {
     setTimeout(() => setIsTerminalOpen(false), 500);
   };
 
+  // Helper to robustly extract JSON from mixed output (stdout + stderr)
+  const extractJson = (text: string) => {
+      const start = text.indexOf('{');
+      const end = text.lastIndexOf('}');
+      if (start > -1 && end > start) {
+          return text.substring(start, end + 1);
+      }
+      return text;
+  };
+
   // Standard Connect (uses global settings)
   const handleConnect = (repo: Repository, overrides?: { passphrase?: string, disableHostCheck?: boolean }) => {
     setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, status: 'connecting' } : r));
@@ -135,10 +146,10 @@ const App: React.FC = () => {
     runCommand(
         `Connecting to ${repo.name}`, 
         ['list', '--json', repo.url], 
-        (jsonOutput) => {
+        (rawOutput) => {
             try {
-                const jsonStartIndex = jsonOutput.indexOf('{');
-                const jsonString = jsonStartIndex > -1 ? jsonOutput.substring(jsonStartIndex) : jsonOutput;
+                // Robust parsing: Strip SSH warnings/banners before the actual JSON
+                const jsonString = extractJson(rawOutput);
                 const data = JSON.parse(jsonString);
                 
                 const newArchives: Archive[] = data.archives.map((a: any) => ({
@@ -165,10 +176,9 @@ const App: React.FC = () => {
                      runCommand(
                         `Fetching Stats for ${repo.name}`,
                         ['info', '--json', repo.url],
-                        (infoOutput) => {
+                        (infoRawOutput) => {
                              try {
-                                 const infoStartIndex = infoOutput.indexOf('{');
-                                 const infoJson = infoStartIndex > -1 ? infoOutput.substring(infoStartIndex) : infoOutput;
+                                 const infoJson = extractJson(infoRawOutput);
                                  const infoData = JSON.parse(infoJson);
                                  
                                  // Parse stats

@@ -197,8 +197,19 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
         });
 
         child.stderr.on('data', (data) => {
-          console.error(`[Mount Error] ${data.toString()}`);
-          if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: data.toString() });
+          const text = data.toString();
+          console.error(`[Mount Error] ${text}`);
+          if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: text });
+          
+          // FUSE DETECTION
+          if (text.includes('no FUSE support')) {
+              const hint = `\n[WinBorg Hint] 🔴 FUSE Missing in WSL!\n` +
+                           `Borg needs FUSE to mount archives as virtual drives.\n` +
+                           `Run these commands in your WSL terminal (Ubuntu):\n` +
+                           `1. sudo apt update && sudo apt install fuse -y\n` +
+                           `2. sudo chmod 666 /dev/fuse`;
+              if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: hint });
+          }
         });
 
         child.on('close', (code) => {

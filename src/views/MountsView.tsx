@@ -25,7 +25,10 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
      // Check if WSL is enabled
      const wslEnabled = localStorage.getItem('winborg_use_wsl') === 'true';
      setUseWsl(wslEnabled);
-     setMountPath(wslEnabled ? '/tmp/borg-mount' : 'Z:');
+     
+     // Use a unique path in /mnt/wsl which is robust and shareable
+     const randomId = Math.floor(Math.random() * 9000) + 1000;
+     setMountPath(wslEnabled ? `/mnt/wsl/winborg-${randomId}` : 'Z:');
 
      if (!selectedRepo && repos.length > 0) {
         setSelectedRepo(repos[0].id);
@@ -44,9 +47,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
     // Basic heuristics: if it looks like a Linux path, try to open via \\wsl$
     // NOTE: This assumes 'Ubuntu' is the distro, ideally we'd store the distro name too.
     if (path.startsWith('/')) {
-        // Fallback or generic open, let the OS handle it, or maybe open \\wsl$\Ubuntu{path}
-        // For now, just alert the user or try a standard open command via a backend bridge if we had one.
-        // Since we don't have a 'open folder' bridge method in the provided context, we simulate.
+        // Alert user for now as we can't spawn explorer.exe directly from here easily without IPC extension
         alert(`Access this in Windows Explorer via: \\\\wsl$\\Ubuntu${path.replace(/\//g, '\\')}`);
     } else {
         // Windows drive
