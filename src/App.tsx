@@ -14,17 +14,13 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
   
   // LOGIC FIX: Persistence
-  // Only load mocks if the app has NEVER been initialized before.
-  // This allows the user to have an empty repo list (and keep it empty) without Mocks coming back.
   const [repos, setRepos] = useState<Repository[]>(() => {
     const isInitialized = localStorage.getItem('winborg_initialized');
     const savedRepos = localStorage.getItem('winborg_repos');
 
     if (isInitialized) {
-        // If initialized, trust the saved data, even if it is null/empty
         return savedRepos ? JSON.parse(savedRepos) : [];
     } else {
-        // First run ever: Load mocks and mark as initialized
         localStorage.setItem('winborg_initialized', 'true');
         return MOCK_REPOS;
     }
@@ -45,7 +41,12 @@ const App: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Helper to run commands with terminal feedback
-  const runCommand = async (title: string, args: string[], onSuccess?: (output: string) => void) => {
+  const runCommand = async (
+      title: string, 
+      args: string[], 
+      onSuccess?: (output: string) => void,
+      overrides?: { passphrase?: string, disableHostCheck?: boolean }
+  ) => {
     setIsTerminalOpen(true);
     setTerminalTitle(title);
     setTerminalLogs([]);
@@ -56,14 +57,14 @@ const App: React.FC = () => {
         const cleanLog = log.trim();
         setTerminalLogs(prev => [...prev, cleanLog]);
         fullOutput += cleanLog;
-    });
+    }, overrides);
 
     setIsProcessing(false);
     if (success) {
         if (onSuccess) onSuccess(fullOutput);
         setTimeout(() => setIsTerminalOpen(false), 1000);
     } else {
-        setTerminalLogs(prev => [...prev, "Command failed. Check settings or network."]);
+        setTerminalLogs(prev => [...prev, "Command failed. Please check the error above."]);
     }
   };
 
@@ -100,16 +101,11 @@ const App: React.FC = () => {
   };
 
   const handleQuickMount = (repo: Repository) => {
-    // If we have archives loaded for this repo, use the first one. 
-    // Realistically, we should filter archives by repo ID, but for now we assume 'archives' state holds the currently connected repo's archives.
     const latestArchive = archives.length > 0 ? archives[0].name : 'latest';
-    
-    // Smart drive selection for Windows
     const usedDrives = mounts.map(m => m.localPath);
     const driveLetters = ['Z:', 'Y:', 'X:', 'W:', 'V:'];
     const drive = driveLetters.find(d => !usedDrives.includes(d)) || 'Z:';
     
-    // Check if WSL
     const isWsl = localStorage.getItem('winborg_use_wsl') === 'true';
     const mountPath = isWsl ? `/mnt/wsl/borg-${repo.name.replace(/\s+/g, '-')}` : drive;
 
@@ -131,48 +127,47 @@ const App: React.FC = () => {
     setTimeout(() => setIsTerminalOpen(false), 500);
   };
 
-  const handleConnect = (repo: Repository) => {
-    // 1. Update status to loading UI immediately
+  // Standard Connect (uses global settings)
+  const handleConnect = (repo: Repository, overrides?: { passphrase?: string, disableHostCheck?: boolean }) => {
     setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, status: 'connecting' } : r));
 
-    // 2. Run 'borg list --json' to get archives and verify connection
-    runCommand(`Connecting to ${repo.name}`, ['list', '--json', repo.url], (jsonOutput) => {
-        try {
-            // Borg might output some text before the JSON (like warnings), so we try to find the JSON start
-            const jsonStartIndex = jsonOutput.indexOf('{');
-            const jsonString = jsonStartIndex > -1 ? jsonOutput.substring(jsonStartIndex) : jsonOutput;
-            
-            const data = JSON.parse(jsonString);
-            
-            // Transform Borg JSON to our Archive type
-            const newArchives: Archive[] = data.archives.map((a: any) => ({
-                id: a.id || a.name,
-                name: a.name,
-                time: a.time,
-                size: 'Unknown', // List JSON doesn't always have size, info does
-                duration: 'Unknown'
-            })).reverse(); // Newest first
+    runCommand(
+        `Connecting to ${repo.name}`, 
+        ['list', '--json', repo.url], 
+        (jsonOutput) => {
+            try {
+                const jsonStartIndex = jsonOutput.indexOf('{');
+                const jsonString = jsonStartIndex > -1 ? jsonOutput.substring(jsonStartIndex) : jsonOutput;
+                const data = JSON.parse(jsonString);
+                
+                const newArchives: Archive[] = data.archives.map((a: any) => ({
+                    id: a.id || a.name,
+                    name: a.name,
+                    time: a.time,
+                    size: 'Unknown',
+                    duration: 'Unknown'
+                })).reverse();
 
-            setArchives(newArchives);
+                setArchives(newArchives);
 
-            // Update Repo Status
-            setRepos(prev => prev.map(r => 
-              r.id === repo.id ? { 
-                  ...r, 
-                  status: 'connected', 
-                  lastBackup: newArchives[0]?.time || 'Never',
-                  fileCount: newArchives.length 
-              } : r
-            ));
-        } catch (e) {
-            console.error("Failed to parse Borg JSON", e);
-            // Fallback for non-JSON output or errors
-            setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, status: 'error' } : r));
-        }
-    });
+                setRepos(prev => prev.map(r => 
+                r.id === repo.id ? { 
+                    ...r, 
+                    status: 'connected', 
+                    lastBackup: newArchives[0]?.time || 'Never',
+                    fileCount: newArchives.length 
+                } : r
+                ));
+            } catch (e) {
+                console.error("Failed to parse Borg JSON", e);
+                setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, status: 'error' } : r));
+            }
+        },
+        overrides // Pass specific overrides (password/ssh) if provided
+    );
   };
 
-  const handleAddRepo = (repoData: { name: string; url: string; encryption: 'repokey' | 'keyfile' | 'none' }) => {
+  const handleAddRepo = (repoData: { name: string; url: string; encryption: 'repokey' | 'keyfile' | 'none', passphrase?: string, trustHost?: boolean }) => {
     const newRepo: Repository = {
        id: Math.random().toString(36).substr(2, 9),
        name: repoData.name,
@@ -184,8 +179,12 @@ const App: React.FC = () => {
        fileCount: 0
     };
     setRepos(prev => [...prev, newRepo]);
-    // Auto try to connect
-    handleConnect(newRepo);
+    
+    // Auto try to connect using the provided credentials
+    handleConnect(newRepo, {
+        passphrase: repoData.passphrase,
+        disableHostCheck: repoData.trustHost
+    });
   };
 
   const handleDeleteRepo = (repoId: string) => {
@@ -252,7 +251,7 @@ const App: React.FC = () => {
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#f3f3f3]">
       <TitleBar />
-      <div className="flex flex-1 overflow-hidden pt-9"> {/* Added pt-9 for TitleBar height */}
+      <div className="flex flex-1 overflow-hidden pt-9">
           <Sidebar currentView={currentView} onChangeView={setCurrentView} />
           
           <TerminalModal 

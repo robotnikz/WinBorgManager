@@ -12,9 +12,12 @@ const getBorgConfig = () => {
     };
 };
 
-const getEnvVars = (config: any) => {
+const getEnvVars = (config: any, overrides?: { passphrase?: string, disableHostCheck?: boolean }) => {
+    const finalPassphrase = overrides?.passphrase !== undefined ? overrides.passphrase : config.passphrase;
+    const finalDisableHostCheck = overrides?.disableHostCheck !== undefined ? overrides.disableHostCheck : config.disableHostCheck;
+
     const env: any = {
-        BORG_PASSPHRASE: config.passphrase,
+        BORG_PASSPHRASE: finalPassphrase,
         // Flags to allow remote access even if unknown
         BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK: 'yes',
         BORG_RELOCATED_REPO_ACCESS_IS_OK: 'yes',
@@ -26,12 +29,12 @@ const getEnvVars = (config: any) => {
         // However, standard env vars need to be listed in WSLENV to be visible inside WSL.
         env.WSLENV = 'BORG_PASSPHRASE/u:BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK/u:BORG_RELOCATED_REPO_ACCESS_IS_OK/u';
         
-        if (config.disableHostCheck) {
+        if (finalDisableHostCheck) {
            env.BORG_RSH = 'ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null';
            env.WSLENV += ':BORG_RSH/u';
         }
     } else {
-        if (config.disableHostCheck) {
+        if (finalDisableHostCheck) {
             env.BORG_RSH = 'ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null';
         }
     }
@@ -42,10 +45,12 @@ const getEnvVars = (config: any) => {
 export const borgService = {
   /**
    * Run a one-off borg command (list, info, create)
+   * Allows overriding config for specific commands (like connection checks with specific passwords)
    */
   runCommand: async (
     args: string[], 
-    onLog: (text: string) => void
+    onLog: (text: string) => void,
+    overrides?: { passphrase?: string, disableHostCheck?: boolean }
   ): Promise<boolean> => {
     const commandId = Math.random().toString(36).substring(7);
     const config = getBorgConfig();
@@ -65,7 +70,7 @@ export const borgService = {
           commandId, 
           useWsl: config.useWsl,
           executablePath: config.path,
-          envVars: getEnvVars(config)
+          envVars: getEnvVars(config, overrides)
       });
       return result.success;
     } finally {

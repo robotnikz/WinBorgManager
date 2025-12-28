@@ -98,6 +98,9 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
     }
 
     console.log(`[Borg] Executing: ${bin} ${finalArgs.join(' ')}`);
+    // Log env vars helpful for debugging (masking password)
+    if (envVars.BORG_PASSPHRASE) console.log(`[Borg] using passphrase: ****`);
+    if (envVars.BORG_RSH) console.log(`[Borg] using BORG_RSH: ${envVars.BORG_RSH}`);
     
     try {
         const child = spawn(bin, finalArgs, {
@@ -106,11 +109,15 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
         });
 
         child.stdout.on('data', (data) => {
-          if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: data.toString() });
+          const text = data.toString();
+          console.log(`[Borg STDOUT] ${text.trim()}`); // Log to terminal for debugging
+          if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: text });
         });
 
         child.stderr.on('data', (data) => {
-          if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: data.toString() });
+          const text = data.toString();
+          console.error(`[Borg STDERR] ${text.trim()}`); // Log to terminal for debugging
+          if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: text });
         });
 
         child.on('close', (code) => {
@@ -124,6 +131,7 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
           resolve({ success: false, error: err.message });
         });
     } catch (e) {
+        console.error(`[Borg] Critical Error: ${e.message}`);
         if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: `Critical Error: ${e.message}` });
         resolve({ success: false, error: e.message });
     }
@@ -138,22 +146,13 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
     let bin, finalArgs;
     
     if (useWsl) {
-        // For mounting in WSL: mkdir -p [mountpoint] first
-        // We can't easily do two commands in one spawn unless we wrap in bash -c
-        // But let's assume the user picks a folder that exists or we try to create it blindly first?
-        // Let's do a quick sync exec to mkdir
-        const mountPoint = args[args.length - 1]; // last arg is mountpoint
+        const mountPoint = args[args.length - 1]; 
         try {
-            // "wsl mkdir -p /tmp/mount"
             require('child_process').execSync(`wsl mkdir -p ${mountPoint}`);
-        } catch(e) { /* ignore if fails, maybe exists */ }
+        } catch(e) { /* ignore */ }
 
         bin = 'wsl';
-        // borg mount -f (foreground) is usually required to keep the process alive for Electron to track
         finalArgs = ['--exec', 'borg', ...args];
-        // Ensure we are in foreground mode if not already passed? Borg mount implies -f usually in scripts, 
-        // but if we spawn it, it stays running until killed.
-        
     } else {
         bin = executablePath || 'borg';
         finalArgs = args;
@@ -174,6 +173,7 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
         });
 
         child.stderr.on('data', (data) => {
+          console.error(`[Mount Error] ${data.toString()}`);
           if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: data.toString() });
         });
 
@@ -183,7 +183,6 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
           if (mainWindow) mainWindow.webContents.send('mount-exited', { mountId, code });
         });
 
-        // Give it a second to fail, otherwise assume success (Mounting blocks)
         setTimeout(() => {
             if (activeMounts.has(mountId)) {
                 resolve({ success: true, pid: child.pid });
@@ -199,14 +198,12 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
 
 ipcMain.handle('borg-unmount', (event, { mountId, localPath, useWsl, executablePath }) => {
   return new Promise((resolve) => {
-    // 1. Try to kill the process if we tracked it (This stops the foreground mount command)
     if (activeMounts.has(mountId)) {
         const child = activeMounts.get(mountId);
         child.kill(); 
         activeMounts.delete(mountId);
     }
 
-    // 2. Also run 'umount' command just in case it's stuck or detached
     let cmd;
     if (useWsl) {
         cmd = `wsl --exec borg umount ${localPath}`;

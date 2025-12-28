@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import { Repository } from '../types';
 import RepoCard from '../components/RepoCard';
 import Button from '../components/Button';
-import { Plus, Search, X } from 'lucide-react';
+import { Plus, Search, X, ShieldAlert, Key } from 'lucide-react';
 
 interface RepositoriesViewProps {
   repos: Repository[];
-  onAddRepo: (repoData: { name: string; url: string; encryption: 'repokey' | 'keyfile' | 'none' }) => void;
+  onAddRepo: (repoData: { name: string; url: string; encryption: 'repokey' | 'keyfile' | 'none', passphrase?: string, trustHost?: boolean }) => void;
   onConnect: (repo: Repository) => void;
   onMount: (repo: Repository) => void;
   onDelete: (repoId: string) => void;
@@ -19,17 +19,21 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
     name: string;
     url: string;
     encryption: 'repokey' | 'keyfile' | 'none';
+    passphrase?: string;
+    trustHost: boolean;
   }>({
     name: '',
     url: '',
-    encryption: 'repokey'
+    encryption: 'repokey',
+    passphrase: '',
+    trustHost: false
   });
 
   const handleSave = () => {
     if (newRepo.name && newRepo.url) {
         onAddRepo(newRepo);
         setIsAdding(false);
-        setNewRepo({ name: '', url: '', encryption: 'repokey' });
+        setNewRepo({ name: '', url: '', encryption: 'repokey', passphrase: '', trustHost: false });
     }
   };
 
@@ -74,21 +78,55 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                  />
                  <p className="text-[10px] text-slate-400 mt-1">Format: ssh://user@host:port/path/to/repo</p>
                </div>
-               <div>
-                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Encryption</label>
-                 <div className="relative">
-                    <select 
-                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm text-slate-900 appearance-none shadow-sm"
-                      value={newRepo.encryption}
-                      onChange={e => setNewRepo({...newRepo, encryption: e.target.value as any})}
-                    >
-                      <option value="repokey">Repokey (Key stored in repo)</option>
-                      <option value="keyfile">Keyfile (Key stored locally)</option>
-                      <option value="none">None (No encryption)</option>
-                    </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                        <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                    </div>
+               
+               <div className="grid grid-cols-2 gap-4">
+                   <div>
+                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Encryption</label>
+                     <div className="relative">
+                        <select 
+                          className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm text-slate-900 appearance-none shadow-sm"
+                          value={newRepo.encryption}
+                          onChange={e => setNewRepo({...newRepo, encryption: e.target.value as any})}
+                        >
+                          <option value="repokey">Repokey</option>
+                          <option value="keyfile">Keyfile</option>
+                          <option value="none">None</option>
+                        </select>
+                     </div>
+                   </div>
+                   
+                   <div>
+                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Passphrase</label>
+                     <div className="relative">
+                        <input 
+                          type="password" 
+                          className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm text-slate-900 shadow-sm"
+                          placeholder="Optional"
+                          value={newRepo.passphrase}
+                          onChange={e => setNewRepo({...newRepo, passphrase: e.target.value})}
+                        />
+                     </div>
+                   </div>
+               </div>
+
+               {/* SSH Options */}
+               <div className="pt-2">
+                 <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                     <div className="mt-0.5">
+                        <input 
+                            type="checkbox" 
+                            id="trust-host" 
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                            checked={newRepo.trustHost}
+                            onChange={(e) => setNewRepo({...newRepo, trustHost: e.target.checked})}
+                        />
+                     </div>
+                     <div>
+                         <label htmlFor="trust-host" className="text-sm font-semibold text-slate-800 cursor-pointer">Trust Unknown SSH Host</label>
+                         <p className="text-xs text-slate-500 mt-0.5">
+                             Fixes "Exit Code 1" on first connection. Automatically accepts new SSH host keys (Disable Strict Host Check).
+                         </p>
+                     </div>
                  </div>
                </div>
              </div>
