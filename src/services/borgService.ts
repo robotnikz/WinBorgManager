@@ -183,6 +183,58 @@ export const borgService = {
   },
 
   /**
+   * Check if the repository is locked by looking for 'lock.roster' file.
+   * Uses `test -e` via SSH or WSL.
+   */
+  checkLockStatus: async (
+      repoUrl: string, 
+      overrides?: { disableHostCheck?: boolean }
+  ): Promise<boolean> => {
+      const parsed = parseBorgUrl(repoUrl);
+      if (!parsed) return false;
+      
+      const config = getBorgConfig();
+      
+      // We check for the 'lock.roster' file inside the repo
+      // Ensure path doesn't end with slash before appending
+      const basePath = parsed.path?.replace(/\/$/, '') || '';
+      const lockFile = `${basePath}/lock.roster`;
+      const testCmd = `test -e "${lockFile}"`;
+      
+      let success = false;
+      
+      // We use runCommand with a specific ID to silence normal logging usually
+      const noOpLog = () => {};
+
+      if (parsed.isSsh) {
+           const userHost = `${parsed.user ? parsed.user + '@' : ''}${parsed.host}`;
+           const args = [
+              '-p', parsed.port!,
+              ...(overrides?.disableHostCheck || config.disableHostCheck ? ['-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null'] : []),
+              '-o', 'BatchMode=yes',
+              userHost,
+              testCmd
+           ];
+           
+           // Exit code 0 means file exists (LOCKED)
+           success = await borgService.runCommand(args, noOpLog, { forceBinary: 'ssh', commandId: `lock-check-${Date.now()}` });
+      } else {
+           // Local / WSL
+           if (config.useWsl) {
+               // Exit code 0 means file exists (LOCKED)
+               success = await borgService.runCommand([testCmd], noOpLog, { forceBinary: 'wsl', commandId: `lock-check-${Date.now()}` });
+           } else {
+               // Windows Native - Use PowerShell Test-Path
+               // Check if path exists. success = true means locked.
+               const psCmd = `Test-Path "${lockFile}"`;
+               success = await borgService.runCommand(['-Command', psCmd], noOpLog, { forceBinary: 'powershell', commandId: `lock-check-${Date.now()}` });
+           }
+      }
+      
+      return success;
+  },
+
+  /**
    * Remove locks (lock.roster, lock.exclusive) from a repository.
    * Standard Borg 'break-lock'.
    */
@@ -330,8 +382,7 @@ export const borgService = {
     const mountId = `mount-${Date.now()}`;
     const config = getBorgConfig();
 
-    // Global log listener for mounts - INIT EARLY to capture setup logs if we want them, 
-    // although setup has its own listener in ensureFuseConfig, we might want to see mount logs immediately.
+    // Global log listener for mounts
     const logListener = (_: any, msg: { id: string, text: string }) => {
         if (msg.id === 'mount') {
           onLog(msg.text);
@@ -341,7 +392,6 @@ export const borgService = {
 
     try {
         // STEP 1: SILENTLY FIX PERMISSIONS (if using WSL)
-        // ensureFuseConfig handles its own logging for setup steps
         if (config.useWsl) {
             await borgService.ensureFuseConfig(onLog);
         }
@@ -370,17 +420,6 @@ export const borgService = {
             return { success: false, error: result.error };
         }
     } finally {
-        // Keep listener alive if success? 
-        // Actually, ipcRenderer listeners persist until removed. 
-        // But activeMounts in main process handles the process. 
-        // We usually only remove listener on component unmount or finish.
-        // However, here we return. The App.tsx handles the mount lifecycle logs via mount-exited event mostly.
-        // But for the initial connection log, we leave it? 
-        // The original code left it attached via App.tsx logic? 
-        // No, runCommand removes it. Mount is special.
-        // Let's leave it attached? No, it causes leaks if we mount many times.
-        // But we need it for async errors like 'FUSE Missing' that come from stderr after return?
-        // Actually `borg-mount` waits 2500ms before resolving. So we capture most startup errors.
         ipcRenderer.removeListener('terminal-log', logListener);
     }
   },

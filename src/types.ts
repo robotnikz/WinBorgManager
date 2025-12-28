@@ -27,6 +27,9 @@ export interface Repository {
   checkStartTime?: number; // Timestamp in ms
   lastCheckTime?: string;
   
+  // Lock State
+  isLocked?: boolean;
+  
   // To allow aborting
   activeCommandId?: string;
 }

@@ -80,12 +80,32 @@ const App: React.FC = () => {
       setActivityLogs(prev => [newLog, ...prev].slice(0, 100));
   };
 
+  // Helper to check lock status for a repo
+  const checkRepoLock = async (repo: Repository) => {
+      // Don't check if we don't have enough info
+      if(!repo.url) return;
+      
+      const isLocked = await borgService.checkLockStatus(repo.url, { disableHostCheck: repo.trustHost });
+      
+      setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, isLocked } : r));
+      
+      if(isLocked) console.log(`[Lock Check] Repo ${repo.name} is LOCKED.`);
+  };
+
   // NEW: Listen for unexpected mount crashes to keep UI in sync
   useEffect(() => {
     try {
         const { ipcRenderer } = (window as any).require('electron');
         const handleMountExited = (_: any, { mountId, code }: { mountId: string, code: number }) => {
             console.log(`Mount ${mountId} exited with code ${code}`);
+            
+            // Check lock status for the affected repo
+            const affectedMount = mounts.find(m => m.id === mountId);
+            if(affectedMount) {
+                const repo = repos.find(r => r.id === affectedMount.repoId);
+                if(repo) setTimeout(() => checkRepoLock(repo), 1000);
+            }
+
             setMounts(prev => {
                 const mount = prev.find(m => m.id === mountId);
                 if (mount) {
@@ -102,7 +122,7 @@ const App: React.FC = () => {
     } catch (e) {
         console.warn("Could not attach mount-exited listener");
     }
-  }, []);
+  }, [mounts, repos]);
 
   // Terminal State
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
@@ -163,6 +183,8 @@ const App: React.FC = () => {
     );
 
     setIsProcessing(false);
+    // Update lock status regardless of success (mount creates locks)
+    setTimeout(() => checkRepoLock(repo), 1000);
 
     if (result.success) {
         addActivity('Mount Successful', `Archive ${archiveName} mounted at ${path}`, 'success');
@@ -209,6 +231,9 @@ const App: React.FC = () => {
     addActivity('Unmount', `Unmounted ${mount.localPath}`, 'success');
     setMounts(prev => prev.filter(m => m.id !== id));
     setIsProcessing(false);
+    
+    const repo = repos.find(r => r.id === mount.repoId);
+    if (repo) setTimeout(() => checkRepoLock(repo), 1000);
   };
 
   const extractJson = (text: string) => {
@@ -244,6 +269,9 @@ const App: React.FC = () => {
         `Connecting to ${repo.name}`, 
         ['list', '--json', repo.url], 
         (rawOutput) => {
+            // After connection attempt, check locks
+            checkRepoLock(repo);
+
             try {
                 const jsonString = extractJson(rawOutput);
                 const data = JSON.parse(jsonString);
@@ -335,6 +363,9 @@ const App: React.FC = () => {
           { passphrase: repo.passphrase, disableHostCheck: repo.trustHost, commandId: commandId }
       );
 
+      // Check locks after operation finishes
+      await checkRepoLock(repo);
+
       setRepos(prev => {
           if (prev.find(r => r.id === repo.id)?.checkStatus === 'aborted') return prev;
           if (success) addActivity('Integrity Check Passed', `Repository ${repo.name} verified.`, 'success');
@@ -356,7 +387,10 @@ const App: React.FC = () => {
           ...r, checkStatus: 'aborted', checkProgress: undefined, checkStartTime: undefined, activeCommandId: undefined
       } : r));
       addActivity('Integrity Check Aborted', `Cancelled check for ${repo.name}`, 'warning');
-      if (repo.activeCommandId) await borgService.stopCommand(repo.activeCommandId);
+      if (repo.activeCommandId) {
+          await borgService.stopCommand(repo.activeCommandId);
+          setTimeout(() => checkRepoLock(repo), 1000);
+      }
   };
   
   const handleBreakLock = async (repo: Repository) => {
@@ -378,6 +412,10 @@ const App: React.FC = () => {
       );
 
       setIsProcessing(false);
+      
+      // Verify lock is gone
+      await checkRepoLock(repo);
+
       if(deleteSuccess) addActivity('Unlock Successful', `Lock files removed for ${repo.name}`, 'success');
       else setIsTerminalOpen(true);
   };

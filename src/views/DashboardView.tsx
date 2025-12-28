@@ -15,7 +15,8 @@ import {
   CheckCircle2,
   XCircle,
   XSquare,
-  Timer
+  Timer,
+  Lock
 } from 'lucide-react';
 import Button from '../components/Button';
 import { parseSizeString, formatBytes, formatDate, formatDuration } from '../utils/formatters';
@@ -237,6 +238,13 @@ const DashboardView: React.FC<DashboardViewProps> = ({ repos, mounts, activityLo
                                             <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
                                                 <span className="truncate max-w-[150px]">{repo.url}</span>
                                                 
+                                                {/* LOCKED BADGE */}
+                                                {repo.isLocked && (
+                                                    <span className="flex items-center gap-1 text-orange-700 bg-orange-100 px-1.5 py-0.5 rounded ml-2 border border-orange-200" title="This repository is currently locked by a process (lock.roster found)">
+                                                        <Lock className="w-3 h-3" /> Locked
+                                                    </span>
+                                                )}
+
                                                 {/* Integrity Status Badge */}
                                                 {repo.checkStatus === 'running' && (
                                                     <div className="flex flex-col gap-1.5 ml-2 w-48">
