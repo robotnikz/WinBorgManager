@@ -137,7 +137,7 @@ export const borgService = {
   /**
    * AUTOMATED FIX for WSL FUSE permissions.
    * Runs as WSL ROOT (passwordless usually) to:
-   * 1. Add 'user_allow_other' to /etc/fuse.conf if missing
+   * 1. Add 'user_allow_other' to /etc/fuse.conf if missing OR uncomment it
    * 2. chmod /dev/fuse to ensure user access
    */
   ensureFuseConfig: async (onLog: (text: string) => void): Promise<boolean> => {
@@ -146,11 +146,12 @@ export const borgService = {
 
       onLog("[Auto-Setup] Checking FUSE permissions in WSL...");
 
-      // Command: "if grep -q ...; then ...; else ...; fi"
       // We run this inside 'bash -c' inside 'wsl -u root'
-      // This allows modifying /etc/fuse.conf without user interaction
+      // Updated logic: Uncomment if commented, append if missing.
       const fixCmd = `
-        if ! grep -q "user_allow_other" /etc/fuse.conf; then 
+        touch /etc/fuse.conf && 
+        sed -i 's/^#\\s*user_allow_other/user_allow_other/' /etc/fuse.conf &&
+        if ! grep -q "^user_allow_other" /etc/fuse.conf; then 
             echo "user_allow_other" >> /etc/fuse.conf; 
             echo "Added user_allow_other to /etc/fuse.conf";
         fi && 
@@ -158,14 +159,27 @@ export const borgService = {
         echo "FUSE permissions verified."
       `;
 
-      return await ipcRenderer.invoke('borg-spawn', { 
-          commandId: 'fuse-setup', 
-          useWsl: true,
-          envVars: {},
-          forceBinary: 'bash',
-          wslUser: 'root', // MAGIC: Run as root via WSL to bypass password prompt
-          args: ['-c', fixCmd]
-      }).then((res: any) => res.success);
+      // Helper listener to show setup logs in the main terminal
+      const logListener = (_: any, msg: { id: string, text: string }) => {
+        if (msg.id === 'fuse-setup') onLog(`[Setup] ${msg.text}`);
+      };
+      ipcRenderer.on('terminal-log', logListener);
+
+      try {
+        return await ipcRenderer.invoke('borg-spawn', { 
+            commandId: 'fuse-setup', 
+            useWsl: true,
+            envVars: {},
+            forceBinary: 'bash',
+            wslUser: 'root', // MAGIC: Run as root via WSL to bypass password prompt
+            args: ['-c', fixCmd]
+        }).then((res: any) => res.success);
+      } catch (e: any) {
+          onLog(`[Setup Error] ${e.message}`);
+          return false;
+      } finally {
+          ipcRenderer.removeListener('terminal-log', logListener);
+      }
   },
 
   /**
@@ -316,22 +330,8 @@ export const borgService = {
     const mountId = `mount-${Date.now()}`;
     const config = getBorgConfig();
 
-    // STEP 1: SILENTLY FIX PERMISSIONS (if using WSL)
-    if (config.useWsl) {
-        await borgService.ensureFuseConfig(onLog);
-    }
-    
-    // Construct args. 
-    // CRITICAL for Windows Access: '-o allow_other'
-    const args = [
-        'mount', 
-        '--foreground', 
-        '-o', 'allow_other', 
-        `${repoUrl}::${archiveName}`, 
-        mountPoint
-    ];
-    
-    // Global log listener for mounts
+    // Global log listener for mounts - INIT EARLY to capture setup logs if we want them, 
+    // although setup has its own listener in ensureFuseConfig, we might want to see mount logs immediately.
     const logListener = (_: any, msg: { id: string, text: string }) => {
         if (msg.id === 'mount') {
           onLog(msg.text);
@@ -339,18 +339,49 @@ export const borgService = {
     };
     ipcRenderer.on('terminal-log', logListener);
 
-    const result = await ipcRenderer.invoke('borg-mount', { 
-        args, 
-        mountId, 
-        useWsl: config.useWsl,
-        executablePath: config.path,
-        envVars: getEnvVars(config, overrides) // Pass overrides (host checks/passphrase)
-    });
-    
-    if (result.success) {
-        return { success: true, mountId };
-    } else {
-        return { success: false, error: result.error };
+    try {
+        // STEP 1: SILENTLY FIX PERMISSIONS (if using WSL)
+        // ensureFuseConfig handles its own logging for setup steps
+        if (config.useWsl) {
+            await borgService.ensureFuseConfig(onLog);
+        }
+        
+        // Construct args. 
+        // CRITICAL for Windows Access: '-o allow_other'
+        const args = [
+            'mount', 
+            '--foreground', 
+            '-o', 'allow_other', 
+            `${repoUrl}::${archiveName}`, 
+            mountPoint
+        ];
+        
+        const result = await ipcRenderer.invoke('borg-mount', { 
+            args, 
+            mountId, 
+            useWsl: config.useWsl,
+            executablePath: config.path,
+            envVars: getEnvVars(config, overrides) // Pass overrides (host checks/passphrase)
+        });
+        
+        if (result.success) {
+            return { success: true, mountId };
+        } else {
+            return { success: false, error: result.error };
+        }
+    } finally {
+        // Keep listener alive if success? 
+        // Actually, ipcRenderer listeners persist until removed. 
+        // But activeMounts in main process handles the process. 
+        // We usually only remove listener on component unmount or finish.
+        // However, here we return. The App.tsx handles the mount lifecycle logs via mount-exited event mostly.
+        // But for the initial connection log, we leave it? 
+        // The original code left it attached via App.tsx logic? 
+        // No, runCommand removes it. Mount is special.
+        // Let's leave it attached? No, it causes leaks if we mount many times.
+        // But we need it for async errors like 'FUSE Missing' that come from stderr after return?
+        // Actually `borg-mount` waits 2500ms before resolving. So we capture most startup errors.
+        ipcRenderer.removeListener('terminal-log', logListener);
     }
   },
 
