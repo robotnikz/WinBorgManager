@@ -1,17 +1,20 @@
+
 import React, { useState } from 'react';
 import { Archive, Repository } from '../types';
 import Button from '../components/Button';
-import { Database, Clock, HardDrive, Search, Filter, Calendar, RefreshCw } from 'lucide-react';
+import { Database, Clock, HardDrive, Search, Filter, Calendar, RefreshCw, Info, DownloadCloud, Loader2 } from 'lucide-react';
 
 interface ArchivesViewProps {
   archives: Archive[];
   repos: Repository[];
   onMount: (repo: Repository, archiveName: string) => void;
   onRefresh: () => void;
+  onGetInfo?: (archiveName: string) => void;
 }
 
-const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, onRefresh }) => {
+const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, onRefresh, onGetInfo }) => {
   const [search, setSearch] = useState('');
+  const [loadingInfo, setLoadingInfo] = useState<string | null>(null);
   
   // Basic filtering
   const filteredArchives = archives.filter(a => 
@@ -20,6 +23,15 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
 
   // Helper to find the active connected repo
   const activeRepo = repos.find(r => r.status === 'connected');
+
+  const handleGetInfo = (archiveName: string) => {
+      setLoadingInfo(archiveName);
+      if (onGetInfo) {
+          onGetInfo(archiveName);
+          // Simple timeout to reset loading state if it takes too long or completes
+          setTimeout(() => setLoadingInfo(null), 3000); 
+      }
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -92,10 +104,24 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
                                     {archive.time}
                                 </div>
                             </td>
-                            <td className="px-6 py-4 text-slate-600">{archive.size}</td>
+                            <td className="px-6 py-4 text-slate-600 font-mono">
+                                {archive.size === 'Unknown' ? (
+                                    <button 
+                                        onClick={() => handleGetInfo(archive.name)}
+                                        className="text-blue-500 hover:text-blue-700 flex items-center gap-1 text-xs bg-blue-50 px-2 py-1 rounded"
+                                        title="Click to calculate size"
+                                        disabled={loadingInfo === archive.name}
+                                    >
+                                        {loadingInfo === archive.name ? <Loader2 className="w-3 h-3 animate-spin"/> : <DownloadCloud className="w-3 h-3" />}
+                                        Calc
+                                    </button>
+                                ) : (
+                                    archive.size
+                                )}
+                            </td>
                             <td className="px-6 py-4 text-slate-600 flex items-center gap-2">
                                 <Clock className="w-4 h-4 text-slate-400" />
-                                {archive.duration}
+                                {archive.duration === 'Unknown' ? '-' : archive.duration}
                             </td>
                             <td className="px-6 py-4 text-right">
                                 <Button 

@@ -3,6 +3,7 @@
 
 // Since we are in Electron with nodeIntegration: true, we can require electron
 const { ipcRenderer } = (window as any).require('electron');
+import { formatBytes, formatDuration } from '../utils/formatters';
 
 const getBorgConfig = () => {
     // WSL DEFAULT STRATEGY:
@@ -52,6 +53,16 @@ const getEnvVars = (config: any, overrides?: { passphrase?: string, disableHostC
     return env;
 };
 
+// Helper to extract JSON from mixed output (stdout + stderr)
+const extractJson = (text: string) => {
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start > -1 && end > start) {
+        return text.substring(start, end + 1);
+    }
+    return null;
+};
+
 export const borgService = {
   /**
    * Run a one-off borg command (list, info, create)
@@ -87,6 +98,47 @@ export const borgService = {
     } finally {
       ipcRenderer.removeListener('terminal-log', logListener);
     }
+  },
+
+  /**
+   * Fetch specific info for a single archive (Size, Duration)
+   * Runs `borg info --json repo::archive`
+   */
+  getArchiveInfo: async (
+    repoUrl: string, 
+    archiveName: string,
+    overrides?: { passphrase?: string, disableHostCheck?: boolean }
+  ): Promise<{ size: string, duration: string } | null> => {
+      let outputBuffer = "";
+      
+      const success = await borgService.runCommand(
+          ['info', '--json', `${repoUrl}::${archiveName}`],
+          (log) => { outputBuffer += log; },
+          overrides
+      );
+
+      if (success) {
+          const jsonStr = extractJson(outputBuffer);
+          if (jsonStr) {
+              try {
+                  const data = JSON.parse(jsonStr);
+                  // Parse size and duration
+                  // data.archive.stats.deduplicated_size or original_size
+                  const stats = data.archives?.[0]?.stats || data.archive?.stats;
+                  const duration = data.archives?.[0]?.duration || data.archive?.duration || 0;
+                  
+                  if (stats) {
+                      return {
+                          size: formatBytes(stats.deduplicated_size || stats.compressed_size),
+                          duration: formatDuration(duration)
+                      };
+                  }
+              } catch (e) {
+                  console.error("Failed to parse archive info", e);
+              }
+          }
+      }
+      return null;
   },
 
   /**

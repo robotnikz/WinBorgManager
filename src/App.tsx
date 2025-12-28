@@ -12,13 +12,12 @@ import FuseSetupModal from './components/FuseSetupModal';
 import { View, Repository, MountPoint, Archive } from './types';
 import { MOCK_REPOS, MOCK_ARCHIVES } from './constants';
 import { borgService } from './services/borgService';
+import { formatDate } from './utils/formatters';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
   
   // LOGIC FIX: Persistence for Repos WITH SANITIZATION
-  // This ensures that after a restart, we don't show "Running" or "Connected" 
-  // for processes that are actually dead.
   const [repos, setRepos] = useState<Repository[]>(() => {
     const isInitialized = localStorage.getItem('winborg_initialized');
     const savedRepos = localStorage.getItem('winborg_repos');
@@ -192,6 +191,25 @@ const App: React.FC = () => {
       return text;
   };
 
+  /**
+   * Fetch specific stats (Size, Duration) for a single archive
+   */
+  const handleFetchArchiveStats = async (repo: Repository, archiveName: string) => {
+     // Set specific archive to "loading" (optional UI enhancement, but for now we rely on async update)
+     console.log(`Fetching stats for ${archiveName}...`);
+     
+     const stats = await borgService.getArchiveInfo(repo.url, archiveName, {
+         passphrase: repo.passphrase,
+         disableHostCheck: repo.trustHost
+     });
+
+     if (stats) {
+         setArchives(prev => prev.map(a => 
+             a.name === archiveName ? { ...a, size: stats.size, duration: stats.duration } : a
+         ));
+     }
+  };
+
   // Standard Connect (uses global settings)
   const handleConnect = (repo: Repository, overrides?: { passphrase?: string, disableHostCheck?: boolean }) => {
     setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, status: 'connecting' } : r));
@@ -213,12 +231,19 @@ const App: React.FC = () => {
                 const newArchives: Archive[] = data.archives.map((a: any) => ({
                     id: a.id || a.name,
                     name: a.name,
-                    time: a.time,
+                    time: formatDate(a.time), // Format Date immediately
                     size: 'Unknown',
                     duration: 'Unknown'
                 })).reverse();
 
                 setArchives(newArchives);
+
+                // AUTO-FETCH LATEST: Fetch info for the first archive automatically
+                if (newArchives.length > 0) {
+                    setTimeout(() => {
+                        handleFetchArchiveStats(repo, newArchives[0].name);
+                    }, 500);
+                }
 
                 setRepos(prev => prev.map(r => 
                 r.id === repo.id ? { 
@@ -461,6 +486,10 @@ const App: React.FC = () => {
                 repos={repos} 
                 onMount={handleArchiveMount}
                 onRefresh={handleRefreshArchives}
+                onGetInfo={(archiveName) => {
+                    const repo = repos.find(r => r.status === 'connected');
+                    if(repo) handleFetchArchiveStats(repo, archiveName);
+                }}
             />
         );
       case View.SETTINGS:
