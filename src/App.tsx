@@ -11,7 +11,7 @@ import ArchivesView from './views/ArchivesView';
 import TerminalModal from './components/TerminalModal';
 import FuseSetupModal from './components/FuseSetupModal';
 import { View, Repository, MountPoint, Archive, ActivityLogEntry } from './types';
-import { MOCK_REPOS, MOCK_ARCHIVES } from './constants';
+import { MOCK_REPOS } from './constants';
 import { borgService } from './services/borgService';
 import { formatDate } from './utils/formatters';
 
