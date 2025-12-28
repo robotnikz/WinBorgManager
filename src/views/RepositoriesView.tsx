@@ -9,9 +9,10 @@ interface RepositoriesViewProps {
   onAddRepo: (repoData: { name: string; url: string; encryption: 'repokey' | 'keyfile' | 'none' }) => void;
   onConnect: (repo: Repository) => void;
   onMount: (repo: Repository) => void;
+  onDelete: (repoId: string) => void;
 }
 
-const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, onConnect, onMount }) => {
+const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, onConnect, onMount, onDelete }) => {
   const [search, setSearch] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [newRepo, setNewRepo] = useState<{
@@ -129,6 +130,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
             repo={repo} 
             onConnect={onConnect}
             onMount={onMount}
+            onDelete={() => onDelete(repo.id)}
           />
         ))}
         {filteredRepos.length === 0 && (

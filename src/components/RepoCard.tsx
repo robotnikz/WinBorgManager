@@ -1,14 +1,15 @@
 import React from 'react';
 import { Repository } from '../types';
-import { Server, Shield, Clock, HardDrive } from 'lucide-react';
+import { Server, Shield, Clock, HardDrive, Trash2 } from 'lucide-react';
 
 interface RepoCardProps {
   repo: Repository;
   onMount?: (repo: Repository) => void;
   onConnect?: (repo: Repository) => void;
+  onDelete?: (repo: Repository) => void;
 }
 
-const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect }) => {
+const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete }) => {
   return (
     <div className="bg-white rounded-xl border border-gray-200/75 p-5 shadow-sm hover:shadow-md transition-all duration-200 group">
       <div className="flex justify-between items-start mb-4">
@@ -21,12 +22,24 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect }) => {
             <p className="text-xs text-slate-500 truncate max-w-[200px]">{repo.url}</p>
           </div>
         </div>
-        <div className={`px-2 py-1 rounded-full text-xs font-medium border ${
-          repo.status === 'connected' 
-            ? 'bg-green-50 text-green-700 border-green-200' 
-            : 'bg-gray-50 text-gray-600 border-gray-200'
-        }`}>
-          {repo.status === 'connected' ? 'Active' : 'Offline'}
+        
+        <div className="flex items-center gap-2">
+            <div className={`px-2 py-1 rounded-full text-xs font-medium border ${
+              repo.status === 'connected' 
+                ? 'bg-green-50 text-green-700 border-green-200' 
+                : 'bg-gray-50 text-gray-600 border-gray-200'
+            }`}>
+              {repo.status === 'connected' ? 'Active' : 'Offline'}
+            </div>
+            {onDelete && (
+                <button 
+                    onClick={() => onDelete(repo)}
+                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                    title="Delete Repository"
+                >
+                    <Trash2 className="w-4 h-4" />
+                </button>
+            )}
         </div>
       </div>
 

@@ -121,6 +121,12 @@ const App: React.FC = () => {
     handleConnect(newRepo);
   };
 
+  const handleDeleteRepo = (repoId: string) => {
+      if (window.confirm("Are you sure you want to remove this repository configuration?")) {
+          setRepos(prev => prev.filter(r => r.id !== repoId));
+      }
+  };
+
   const renderContent = () => {
     switch (currentView) {
       case View.REPOSITORIES:
@@ -130,6 +136,7 @@ const App: React.FC = () => {
             onAddRepo={handleAddRepo} 
             onConnect={handleConnect}
             onMount={handleQuickMount}
+            onDelete={handleDeleteRepo}
           />
         );
       case View.MOUNTS:
