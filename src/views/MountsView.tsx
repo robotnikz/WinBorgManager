@@ -62,19 +62,36 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
   const handleOpenFolder = (path: string) => {
     try {
         const { ipcRenderer } = (window as any).require('electron');
-        // IPC handles the path translation for WSL
-        ipcRenderer.send('open-path', path);
+        
+        let pathToSend = path;
+        
+        // Transform Linux WSL path to Windows UNC path for standard Ubuntu
+        if (path.startsWith('/')) {
+             // 1. Convert forward slashes to backslashes
+             const windowsStyle = path.replace(/\//g, '\\');
+             // 2. Prepend the WSL network path for Ubuntu
+             // Result: \\wsl.localhost\Ubuntu\mnt\wsl\winborg\archive_name
+             pathToSend = `\\\\wsl.localhost\\Ubuntu${windowsStyle}`;
+        }
+
+        console.log("Opening Path:", pathToSend);
+        ipcRenderer.send('open-path', pathToSend);
     } catch(e) {
-        alert(`Path: ${path}`);
+        alert(`Could not open path: ${path}`);
     }
   };
 
   const currentRepoStatus = repos.find(r => r.id === selectedRepo)?.status;
   
-  // Dynamic Preview
-  const targetPathPreview = useWsl 
+  // Dynamic Preview for the UI
+  // Note: We display the internal Linux path for tech correctness, but show the UNC hint below
+  const internalPath = useWsl 
     ? `/mnt/wsl/winborg/${selectedArchive || '...'}` 
-    : 'Z: (Windows Native - Warning: WSL Recommended)';
+    : 'Z:';
+
+  const explorerPathHint = useWsl 
+    ? `\\\\wsl.localhost\\Ubuntu${internalPath.replace(/\//g, '\\')}`
+    : internalPath;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -132,7 +149,8 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
            <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-800">
                <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
                <div className="flex-1 font-mono text-xs break-all">
-                   <strong>Mount Target:</strong> {targetPathPreview}
+                   <div className="mb-1"><strong>Mount Point (Linux):</strong> {internalPath}</div>
+                   <div><strong>Windows Explorer:</strong> {explorerPathHint}</div>
                </div>
            </div>
 
