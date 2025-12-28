@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Button from '../components/Button';
-import { User, Save, Terminal, Shield, Check, Key, AlertTriangle, ExternalLink, RefreshCw, Network } from 'lucide-react';
+import { User, Save, Terminal, Shield, Check, Key, AlertTriangle, ExternalLink, RefreshCw, Network, Info } from 'lucide-react';
 import { borgService } from '../services/borgService';
 
 const SettingsView: React.FC = () => {
@@ -10,6 +10,7 @@ const SettingsView: React.FC = () => {
   const [disableHostCheck, setDisableHostCheck] = useState(false);
   const [saved, setSaved] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [testOutput, setTestOutput] = useState('');
 
   useEffect(() => {
     const storedWsl = localStorage.getItem('winborg_use_wsl');
@@ -34,9 +35,12 @@ const SettingsView: React.FC = () => {
 
   const handleTest = async () => {
     setTestStatus('loading');
-    const success = await borgService.runCommand(['--version'], (log) => console.log(log));
+    setTestOutput('');
+    const success = await borgService.runCommand(['--version'], (log) => {
+        console.log(log);
+        setTestOutput(prev => prev + log);
+    });
     setTestStatus(success ? 'success' : 'error');
-    setTimeout(() => setTestStatus('idle'), 3000);
   };
 
   return (
@@ -79,15 +83,15 @@ const SettingsView: React.FC = () => {
         {/* Dynamic Instructions */}
         <div className="bg-blue-50 border border-blue-100 rounded-lg p-5 mb-6 text-sm text-slate-700 space-y-4">
             <h3 className="font-semibold text-blue-900 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-blue-500" /> 
-                {useWsl ? 'How to set up WSL (Simple Guide)' : 'Windows Native Setup'}
+                <Info className="w-4 h-4 text-blue-500" /> 
+                {useWsl ? 'Setup Guide: WSL' : 'Setup Guide: Windows Native'}
             </h3>
             
             {useWsl ? (
                 <div className="space-y-3">
-                    <p className="text-xs">1. Open PowerShell as Admin and run <code>wsl --install</code>, then restart PC.</p>
-                    <p className="text-xs">2. Open "Ubuntu" from Start menu, create user/password.</p>
-                    <p className="text-xs">3. Run this command inside Ubuntu to get Borg:</p>
+                    <p className="text-xs">1. Open PowerShell as Admin and run <code>wsl --install</code>, then restart PC if needed.</p>
+                    <p className="text-xs">2. Open "Ubuntu" (or your distro) from Start menu.</p>
+                    <p className="text-xs">3. Run this command inside Ubuntu to install Borg:</p>
                     <div className="bg-slate-900 rounded p-3 font-mono text-xs">
                         <code className="block text-green-400 select-all cursor-pointer" onClick={() => navigator.clipboard.writeText('sudo apt update && sudo apt install borgbackup fuse -y')}>
                             sudo apt update && sudo apt install borgbackup fuse -y
@@ -97,10 +101,14 @@ const SettingsView: React.FC = () => {
                 </div>
             ) : (
                 <div className="space-y-3">
-                     <p>Use Scoop to install Borg on Windows directly.</p>
-                     <code className="block bg-slate-900 text-yellow-400 p-2 rounded text-xs font-mono">
-                        scoop bucket add extras && scoop install borgbackup
-                    </code>
+                     <p className="text-xs font-semibold">Requirement: Borg must be installed on Windows.</p>
+                     <p className="text-xs">The easiest way is using <a href="https://scoop.sh" target="_blank" className="underline text-blue-600">Scoop</a>.</p>
+                     <div className="bg-slate-900 rounded p-3 font-mono text-xs text-yellow-400">
+                        <div className="mb-2 text-slate-400"># Run in PowerShell:</div>
+                        <code className="block select-all cursor-pointer" onClick={() => navigator.clipboard.writeText('scoop bucket add extras && scoop install borgbackup')}>
+                            scoop bucket add extras<br/>scoop install borgbackup
+                        </code>
+                    </div>
                 </div>
             )}
         </div>
@@ -118,6 +126,7 @@ const SettingsView: React.FC = () => {
                         placeholder="borg"
                     />
                 </div>
+                <p className="text-[10px] text-slate-400 mt-1">If 'borg' is in your PATH, leave as is. Otherwise paste full path to borg.exe.</p>
             </div>
             )}
 
@@ -133,6 +142,7 @@ const SettingsView: React.FC = () => {
                         placeholder="••••••••••••"
                     />
                 </div>
+                <p className="text-[10px] text-slate-400 mt-1">Default passphrase used if not specified per-repo.</p>
             </div>
 
             {/* SSH Options */}
@@ -151,7 +161,7 @@ const SettingsView: React.FC = () => {
                      <div>
                          <label htmlFor="host-check" className="text-sm font-medium text-slate-800">Disable Strict Host Key Checking</label>
                          <p className="text-xs text-slate-500">
-                             Automatically accept unknown SSH host keys. Essential for automated connections, but less secure against Man-in-the-Middle attacks.
+                             Essential for automation. Automatically accepts new SSH host keys.
                          </p>
                      </div>
                  </div>
@@ -164,8 +174,13 @@ const SettingsView: React.FC = () => {
                     disabled={testStatus === 'loading'}
                     className={`w-full ${testStatus === 'success' ? 'border-green-500 text-green-600 bg-green-50' : testStatus === 'error' ? 'border-red-500 text-red-600 bg-red-50' : ''}`}
                 >
-                    {testStatus === 'loading' ? 'Testing Connection...' : testStatus === 'success' ? 'Connection Successful!' : testStatus === 'error' ? 'Test Failed (Is WSL installed?)' : 'Test Borg Connection'}
+                    {testStatus === 'loading' ? 'Testing Connection...' : testStatus === 'success' ? 'Borg Found & Working!' : testStatus === 'error' ? 'Borg Not Found / Error' : 'Test Borg Installation'}
                 </Button>
+                {testStatus === 'error' && (
+                    <div className="mt-2 p-3 bg-red-50 text-red-700 text-xs rounded border border-red-100 font-mono whitespace-pre-wrap">
+                        {testOutput || "Could not execute command. Check if installed."}
+                    </div>
+                )}
             </div>
         </div>
       </div>

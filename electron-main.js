@@ -118,6 +118,21 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
           const text = data.toString();
           console.error(`[Borg STDERR] ${text.trim()}`); // Log to terminal for debugging
           if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: text });
+
+          // WINBORG UX IMPROVEMENT: Detect common "command not found" errors
+          const lower = text.toLowerCase();
+          if (
+              lower.includes('not recognized') || 
+              lower.includes('falsch geschrieben') || 
+              lower.includes('not found') ||
+              lower.includes('nicht gefunden')
+          ) {
+              const hint = `\n[WinBorg Hint] 🔴 Borg binary not found!\n` +
+                           `1. If you want to use Windows native: Install Borg (e.g. 'scoop install borgbackup').\n` +
+                           `2. If you want to use WSL (Linux): Go to Settings and enable 'Use WSL'.\n` + 
+                           `3. Check the Path in Settings.`;
+              if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: hint });
+          }
         });
 
         child.on('close', (code) => {
