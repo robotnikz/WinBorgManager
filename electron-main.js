@@ -133,6 +133,15 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
                            `3. Check the Path in Settings.`;
               if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: hint });
           }
+          
+          // Detect SSH Permission Denied (e.g. missing keys)
+          if (lower.includes('permission denied') && (lower.includes('publickey') || lower.includes('password'))) {
+             const hint = `\n[WinBorg Hint] 🔐 SSH Access Denied!\n` +
+                          `The server rejected the key. Borg cannot ask for passwords here.\n` +
+                          `FIX: Copy your SSH key to the server. Run this in your WSL terminal:\n` +
+                          `ssh-copy-id -p <PORT> <USER>@<HOST>`;
+             if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: hint });
+          }
         });
 
         child.on('close', (code) => {

@@ -131,6 +131,7 @@ const App: React.FC = () => {
   const handleConnect = (repo: Repository, overrides?: { passphrase?: string, disableHostCheck?: boolean }) => {
     setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, status: 'connecting' } : r));
 
+    // Step 1: List Archives
     runCommand(
         `Connecting to ${repo.name}`, 
         ['list', '--json', repo.url], 
@@ -158,6 +159,38 @@ const App: React.FC = () => {
                     fileCount: newArchives.length 
                 } : r
                 ));
+
+                // Step 2: Fetch Stats (Chain call)
+                setTimeout(() => {
+                     runCommand(
+                        `Fetching Stats for ${repo.name}`,
+                        ['info', '--json', repo.url],
+                        (infoOutput) => {
+                             try {
+                                 const infoStartIndex = infoOutput.indexOf('{');
+                                 const infoJson = infoStartIndex > -1 ? infoOutput.substring(infoStartIndex) : infoOutput;
+                                 const infoData = JSON.parse(infoJson);
+                                 
+                                 // Parse stats
+                                 const stats = infoData.cache?.stats || infoData.repository?.stats;
+                                 let sizeStr = 'Unknown';
+                                 
+                                 if (stats && stats.unique_csize) {
+                                     const gb = stats.unique_csize / 1024 / 1024 / 1024;
+                                     sizeStr = gb.toFixed(2) + ' GB';
+                                 }
+
+                                 setRepos(prev => prev.map(r => 
+                                    r.id === repo.id ? { ...r, size: sizeStr } : r
+                                 ));
+                             } catch(e) {
+                                 console.warn("Could not parse info stats", e);
+                             }
+                        },
+                        overrides
+                     );
+                }, 800);
+
             } catch (e) {
                 console.error("Failed to parse Borg JSON", e);
                 setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, status: 'error' } : r));

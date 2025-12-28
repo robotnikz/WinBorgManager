@@ -29,21 +29,21 @@ const getEnvVars = (config: any, overrides?: { passphrase?: string, disableHostC
         BORG_RELOCATED_REPO_ACCESS_IS_OK: 'yes',
     };
     
+    // Construct SSH Command with BatchMode=yes to prevent hangs.
+    // BatchMode=yes fails immediately if password/phrase is asked.
+    let sshCmd = 'ssh -o BatchMode=yes';
+    if (finalDisableHostCheck) {
+        sshCmd += ' -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null';
+    }
+
+    // Always set BORG_RSH so we control the SSH behavior
+    env.BORG_RSH = sshCmd;
+    
     // If using WSL, we need to tell Windows to pass these variables into the WSL instance
     if (config.useWsl) {
         // /u flag for WSLENV means "translate path", but for simple strings (passwords), just passing the name is usually enough.
         // However, standard env vars need to be listed in WSLENV to be visible inside WSL.
-        env.WSLENV = 'BORG_PASSPHRASE/u:BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK/u:BORG_RELOCATED_REPO_ACCESS_IS_OK/u';
-        
-        if (finalDisableHostCheck) {
-           // We pass the SSH command as an environment variable to Borg inside WSL
-           env.BORG_RSH = 'ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null';
-           env.WSLENV += ':BORG_RSH/u';
-        }
-    } else {
-        if (finalDisableHostCheck) {
-            env.BORG_RSH = 'ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null';
-        }
+        env.WSLENV = 'BORG_PASSPHRASE/u:BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK/u:BORG_RELOCATED_REPO_ACCESS_IS_OK/u:BORG_RSH/u';
     }
     
     return env;
