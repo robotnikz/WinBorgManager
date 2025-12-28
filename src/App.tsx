@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
+import TitleBar from './components/TitleBar';
 import RepositoriesView from './views/RepositoriesView';
 import MountsView from './views/MountsView';
 import SettingsView from './views/SettingsView';
@@ -12,10 +13,21 @@ import { borgService } from './services/borgService';
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
   
-  // Initialize from LocalStorage or fallback to Mocks
+  // LOGIC FIX: Persistence
+  // Only load mocks if the app has NEVER been initialized before.
+  // This allows the user to have an empty repo list (and keep it empty) without Mocks coming back.
   const [repos, setRepos] = useState<Repository[]>(() => {
-    const saved = localStorage.getItem('winborg_repos');
-    return saved ? JSON.parse(saved) : MOCK_REPOS;
+    const isInitialized = localStorage.getItem('winborg_initialized');
+    const savedRepos = localStorage.getItem('winborg_repos');
+
+    if (isInitialized) {
+        // If initialized, trust the saved data, even if it is null/empty
+        return savedRepos ? JSON.parse(savedRepos) : [];
+    } else {
+        // First run ever: Load mocks and mark as initialized
+        localStorage.setItem('winborg_initialized', 'true');
+        return MOCK_REPOS;
+    }
   });
 
   const [mounts, setMounts] = useState<MountPoint[]>([]);
@@ -238,23 +250,25 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#f3f3f3]">
-      <Sidebar currentView={currentView} onChangeView={setCurrentView} />
-      
-      <TerminalModal 
-        isOpen={isTerminalOpen}
-        title={terminalTitle}
-        logs={terminalLogs}
-        onClose={() => setIsTerminalOpen(false)}
-        isProcessing={isProcessing}
-      />
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#f3f3f3]">
+      <TitleBar />
+      <div className="flex flex-1 overflow-hidden pt-9"> {/* Added pt-9 for TitleBar height */}
+          <Sidebar currentView={currentView} onChangeView={setCurrentView} />
+          
+          <TerminalModal 
+            isOpen={isTerminalOpen}
+            title={terminalTitle}
+            logs={terminalLogs}
+            onClose={() => setIsTerminalOpen(false)}
+            isProcessing={isProcessing}
+          />
 
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative">
-        <div className="h-8 w-full drag-region" />
-        <div className="flex-1 overflow-y-auto p-8 pt-4">
-           {renderContent()}
-        </div>
-      </main>
+          <main className="flex-1 flex flex-col h-full overflow-hidden relative">
+            <div className="flex-1 overflow-y-auto p-8 pt-4">
+               {renderContent()}
+            </div>
+          </main>
+      </div>
     </div>
   );
 };

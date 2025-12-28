@@ -15,13 +15,18 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    minWidth: 800,
+    minHeight: 600,
     frame: false, // Frameless for custom Windows 11 UI
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false, // Security: Allow direct access to node in renderer for this local app
     },
     backgroundColor: '#f3f3f3',
-    icon: path.join(__dirname, 'public/icon.png')
+    icon: path.join(__dirname, 'public/icon.png'),
+    // Windows 11 styling hint
+    titleBarStyle: 'hidden',
+    titleBarOverlay: false
   });
 
   // For development (Vite runs on 5173 by default)
@@ -36,6 +41,25 @@ app.on('window-all-closed', () => {
     try { process.kill(); } catch(e) {}
   });
   if (process.platform !== 'darwin') app.quit();
+});
+
+// --- WINDOW CONTROLS HANDLERS ---
+ipcMain.on('window-minimize', () => {
+    if (mainWindow) mainWindow.minimize();
+});
+
+ipcMain.on('window-maximize', () => {
+    if (mainWindow) {
+        if (mainWindow.isMaximized()) {
+            mainWindow.unmaximize();
+        } else {
+            mainWindow.maximize();
+        }
+    }
+});
+
+ipcMain.on('window-close', () => {
+    if (mainWindow) mainWindow.close();
 });
 
 // --- HELPER ---
