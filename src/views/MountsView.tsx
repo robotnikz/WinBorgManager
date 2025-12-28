@@ -20,27 +20,23 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
   const [mountPath, setMountPath] = useState('');
   const [useWsl, setUseWsl] = useState(false);
   
-  // Available Windows drive letters
   const drives = "ZYXWVUTSRQPONMLKJIHGFEDCBA".split('').map(l => l + ':');
 
   useEffect(() => {
-     // Check if WSL is enabled
+     // Force re-read config
      const wslEnabled = localStorage.getItem('winborg_use_wsl') === 'true';
      setUseWsl(wslEnabled);
      
-     // USER REQUEST: Always use unique fixed path to avoid collisions
-     // We use /mnt/wsl/winborg because /mnt/wsl is a tmpfs intended for sharing and is writable.
-     // We append a random ID so we don't get "Directory not empty"
+     // FIX FOR ERROR 0x01021997:
+     // If in WSL, we MUST NOT mount to a Windows Drive (like Z:).
+     // We must mount to a Linux path (e.g. /tmp/winborg_xxx).
      if (wslEnabled) {
-         // We'll update the path dynamically based on archive selection if we could, 
-         // but for now just a unique base is good.
          const randomId = Math.random().toString(36).substring(2, 6);
-         setMountPath(`/mnt/wsl/winborg/${randomId}`);
+         setMountPath(`/tmp/winborg_${randomId}`);
      } else {
          setMountPath('Z:');
      }
 
-     // Handle Preselection from other views
      if (preselectedRepoId) {
         setIsCreating(true);
         setSelectedRepo(preselectedRepoId);
@@ -48,11 +44,9 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
         setSelectedRepo(repos[0].id);
      }
 
-     // Auto-select first archive if available and none selected
      if (!selectedArchive && archives.length > 0) {
         setSelectedArchive(archives[0].name);
      } else if (archives.length > 0 && !archives.find(a => a.name === selectedArchive)) {
-        // If current selection is not in list (e.g. list refreshed), pick first
         setSelectedArchive(archives[0].name);
      }
   }, [repos, archives, selectedRepo, selectedArchive, preselectedRepoId]);
@@ -63,37 +57,16 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
   };
 
   const handleOpenFolder = (path: string) => {
-    // Basic heuristics: if it looks like a Linux path, try to open via \\wsl$
-    if (path.startsWith('/')) {
-        // Convert linux path to UNC path for Windows Explorer
-        // Try generic \\wsl$ which is the root
-        // If we knew the distro we could do \\wsl$\Ubuntu
-        // But simply opening the path via `explorer.exe` inside WSL works too, 
-        // however we are on Windows side.
-        // Let's guess default distro (which is usually where wsl --exec runs)
-        
-        // Strategy: Open \\wsl.localhost\Ubuntu + path
-        // We replace forward slashes with backslashes
-        const relativePath = path.replace(/\//g, '\\');
-        // NOTE: We try accessing the 'Ubuntu' distro by default. 
-        // If user uses Debian, they might need to navigate manually.
-        // We instruct the user on error.
-        
-        const uncPath = `\\\\wsl$\\Ubuntu${relativePath}`;
-        
-        try {
-            // Send IPC to main to open
-             (window as any).require('electron').ipcRenderer.send('open-path', uncPath);
-        } catch(e) {
-            alert(`Opening in Explorer: ${uncPath}\n\n(If this fails, open Explorer and type \\\\wsl$)`);
+    try {
+        const { ipcRenderer } = (window as any).require('electron');
+        let explorerPath = path;
+        if (path.startsWith('/')) {
+             const relativePath = path.replace(/\//g, '\\');
+             explorerPath = `\\\\wsl$\\Ubuntu${relativePath}`;
         }
-    } else {
-        // Windows drive
-         try {
-            (window as any).require('electron').ipcRenderer.send('open-path', path);
-        } catch(e) {
-            alert(`Opening ${path}`);
-        }
+        ipcRenderer.send('open-path', explorerPath);
+    } catch(e) {
+        alert(`Path: ${path}`);
     }
   };
 
@@ -150,7 +123,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
              </div>
 
              <div>
-               <label className="block text-xs font-medium text-slate-500 mb-1">{useWsl ? 'WSL Mount Path' : 'Drive Letter'}</label>
+               <label className="block text-xs font-medium text-slate-500 mb-1">{useWsl ? 'Linux Mount Path' : 'Drive Letter'}</label>
                {useWsl ? (
                    <div className="flex gap-2">
                        <input 
@@ -158,11 +131,12 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
                           className="w-full p-2 bg-white border border-gray-200 rounded-md text-sm text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                           value={mountPath}
                           onChange={(e) => setMountPath(e.target.value)}
-                          placeholder="/mnt/wsl/winborg/..."
+                          placeholder="/tmp/winborg_..."
+                          readOnly
                        />
                        <button 
                          className="p-2 text-slate-400 hover:text-slate-600" 
-                         onClick={() => setMountPath(`/mnt/wsl/winborg/${Math.random().toString(36).substring(2, 6)}`)}
+                         onClick={() => setMountPath(`/tmp/winborg_${Math.random().toString(36).substring(2, 6)}`)}
                          title="Generate new path"
                        >
                            <Loader2 className="w-4 h-4" />
@@ -177,7 +151,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
                      {drives.map(l => <option key={l} value={l}>{l}</option>)}
                    </select>
                )}
-               {useWsl && <p className="text-[10px] text-slate-400 mt-1">Unique folder to avoid conflicts.</p>}
+               {useWsl && <p className="text-[10px] text-slate-400 mt-1">Using Linux temp folder to avoid Windows filesystem conflicts.</p>}
              </div>
            </div>
 
