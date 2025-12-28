@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { MountPoint, Repository, Archive } from '../types';
 import Button from '../components/Button';
-import { FolderOpen, XCircle, HardDrive, Terminal, Loader2 } from 'lucide-react';
+import { FolderOpen, XCircle, HardDrive, Terminal, Loader2, Copy } from 'lucide-react';
 
 interface MountsViewProps {
   mounts: MountPoint[];
@@ -27,10 +28,17 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
      const wslEnabled = localStorage.getItem('winborg_use_wsl') === 'true';
      setUseWsl(wslEnabled);
      
-     // USER REQUEST: Always use fixed path
-     // We use /mnt/wsl/winborg because /mnt is often root-owned and read-only for users.
-     // /mnt/wsl is a tmpfs intended for sharing and is writable.
-     setMountPath(wslEnabled ? `/mnt/wsl/winborg` : 'Z:');
+     // USER REQUEST: Always use unique fixed path to avoid collisions
+     // We use /mnt/wsl/winborg because /mnt/wsl is a tmpfs intended for sharing and is writable.
+     // We append a random ID so we don't get "Directory not empty"
+     if (wslEnabled) {
+         // We'll update the path dynamically based on archive selection if we could, 
+         // but for now just a unique base is good.
+         const randomId = Math.random().toString(36).substring(2, 6);
+         setMountPath(`/mnt/wsl/winborg/${randomId}`);
+     } else {
+         setMountPath('Z:');
+     }
 
      // Handle Preselection from other views
      if (preselectedRepoId) {
@@ -58,13 +66,34 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
     // Basic heuristics: if it looks like a Linux path, try to open via \\wsl$
     if (path.startsWith('/')) {
         // Convert linux path to UNC path for Windows Explorer
-        // e.g. /mnt/wsl/winborg -> \\wsl$\Ubuntu\mnt\wsl\winborg
-        // Note: We don't know the exact distro name easily here, defaulting to wsl$ (default distro)
-        const uncPath = `\\\\wsl.localhost\\Ubuntu${path.replace(/\//g, '\\')}`;
-        alert(`Opening in Explorer: ${uncPath}\n\n(If this fails, open Explorer and type \\\\wsl$)`);
+        // Try generic \\wsl$ which is the root
+        // If we knew the distro we could do \\wsl$\Ubuntu
+        // But simply opening the path via `explorer.exe` inside WSL works too, 
+        // however we are on Windows side.
+        // Let's guess default distro (which is usually where wsl --exec runs)
+        
+        // Strategy: Open \\wsl.localhost\Ubuntu + path
+        // We replace forward slashes with backslashes
+        const relativePath = path.replace(/\//g, '\\');
+        // NOTE: We try accessing the 'Ubuntu' distro by default. 
+        // If user uses Debian, they might need to navigate manually.
+        // We instruct the user on error.
+        
+        const uncPath = `\\\\wsl$\\Ubuntu${relativePath}`;
+        
+        try {
+            // Send IPC to main to open
+             (window as any).require('electron').ipcRenderer.send('open-path', uncPath);
+        } catch(e) {
+            alert(`Opening in Explorer: ${uncPath}\n\n(If this fails, open Explorer and type \\\\wsl$)`);
+        }
     } else {
         // Windows drive
-        alert(`Opening ${path}`);
+         try {
+            (window as any).require('electron').ipcRenderer.send('open-path', path);
+        } catch(e) {
+            alert(`Opening ${path}`);
+        }
     }
   };
 
@@ -123,13 +152,22 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
              <div>
                <label className="block text-xs font-medium text-slate-500 mb-1">{useWsl ? 'WSL Mount Path' : 'Drive Letter'}</label>
                {useWsl ? (
-                   <input 
-                      type="text" 
-                      className="w-full p-2 bg-white border border-gray-200 rounded-md text-sm text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                      value={mountPath}
-                      onChange={(e) => setMountPath(e.target.value)}
-                      placeholder="/mnt/wsl/winborg"
-                   />
+                   <div className="flex gap-2">
+                       <input 
+                          type="text" 
+                          className="w-full p-2 bg-white border border-gray-200 rounded-md text-sm text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                          value={mountPath}
+                          onChange={(e) => setMountPath(e.target.value)}
+                          placeholder="/mnt/wsl/winborg/..."
+                       />
+                       <button 
+                         className="p-2 text-slate-400 hover:text-slate-600" 
+                         onClick={() => setMountPath(`/mnt/wsl/winborg/${Math.random().toString(36).substring(2, 6)}`)}
+                         title="Generate new path"
+                       >
+                           <Loader2 className="w-4 h-4" />
+                       </button>
+                   </div>
                ) : (
                    <select 
                      className="w-full p-2 bg-gray-50 border border-gray-200 rounded-md text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -139,7 +177,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
                      {drives.map(l => <option key={l} value={l}>{l}</option>)}
                    </select>
                )}
-               {useWsl && <p className="text-[10px] text-slate-400 mt-1">Recommended: <code>/mnt/wsl/winborg</code> (Always writable)</p>}
+               {useWsl && <p className="text-[10px] text-slate-400 mt-1">Unique folder to avoid conflicts.</p>}
              </div>
            </div>
 
@@ -178,7 +216,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
                     <h4 className="font-bold text-slate-800">{mount.archiveName}</h4>
                     <p className="text-xs text-slate-500 flex items-center gap-2">
                        <HardDrive className="w-3 h-3" />
-                       Mounted at <span className="font-medium text-slate-700 font-mono bg-gray-50 px-1 rounded">{mount.localPath}</span>
+                       Mounted at <span className="font-medium text-slate-700 font-mono bg-gray-50 px-1 rounded truncate max-w-[200px]" title={mount.localPath}>{mount.localPath}</span>
                     </p>
                  </div>
               </div>
@@ -186,7 +224,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
               <div className="flex items-center gap-3">
                  <Button variant="secondary" size="sm" onClick={() => handleOpenFolder(mount.localPath)}>
                     <FolderOpen className="w-4 h-4 mr-2" />
-                    Info
+                    Open
                  </Button>
                  <Button variant="danger" size="sm" onClick={() => onUnmount(mount.id)}>
                     <XCircle className="w-4 h-4 mr-2" />

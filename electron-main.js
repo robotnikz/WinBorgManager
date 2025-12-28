@@ -3,7 +3,7 @@
  * REAL BACKEND FOR WINBORG
  */
 
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -79,6 +79,12 @@ ipcMain.on('window-maximize', () => {
 
 ipcMain.on('window-close', () => {
     if (mainWindow) mainWindow.close();
+});
+
+ipcMain.on('open-path', (event, pathString) => {
+    shell.openPath(pathString).then((error) => {
+        if (error) console.error('Failed to open path:', error);
+    });
 });
 
 // --- HELPER ---
@@ -237,10 +243,12 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
         // Use wsl --exec mkdir -p ... to ensuring linux command runs
         try {
             console.log(`[Borg Mount] Creating directory: ${mountPoint}`);
+            // Force create directory. Fail loudly if it fails.
             require('child_process').execSync(`wsl --exec mkdir -p "${mountPoint}"`);
         } catch(e) { 
             console.error(`[Borg Mount] Failed to create directory ${mountPoint}`, e.message);
-            if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: `Warning: Failed to create ${mountPoint}. It might require sudo or already exist with bad permissions.` });
+            if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: `FATAL ERROR: Failed to create mountpoint ${mountPoint}. It might require sudo or permission fixes.` });
+            return resolve({ success: false, error: "MKDIR_FAILED" });
         }
 
         bin = 'wsl';
@@ -295,6 +303,7 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
         });
 
         // Wait to see if process stays alive
+        // Increased wait time slightly to catch immediate crashes
         setTimeout(() => {
             if (activeMounts.has(mountId)) {
                 resolve({ success: true, pid: child.pid });
@@ -305,7 +314,7 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
                     error: fuseError ? 'FUSE_MISSING' : 'PROCESS_EXITED' 
                 });
             }
-        }, 2000);
+        }, 2500);
     } catch (e) {
         resolve({ success: false, error: e.message });
     }
@@ -322,7 +331,8 @@ ipcMain.handle('borg-unmount', (event, { mountId, localPath, useWsl, executableP
 
     let cmd;
     if (useWsl) {
-        cmd = `wsl --exec borg umount ${localPath}`;
+        // Force unmount using fusermount -u -z (lazy unmount) which is safer
+        cmd = `wsl --exec fusermount3 -u -z ${localPath}`;
     } else {
         const bin = executablePath || 'borg';
         cmd = `"${bin}" umount ${localPath}`;

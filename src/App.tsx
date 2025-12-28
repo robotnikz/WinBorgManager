@@ -11,7 +11,7 @@ import ArchivesView from './views/ArchivesView';
 import TerminalModal from './components/TerminalModal';
 import FuseSetupModal from './components/FuseSetupModal';
 import { View, Repository, MountPoint, Archive, ActivityLogEntry } from './types';
-import { MOCK_REPOS, MOCK_ARCHIVES } from './constants';
+import { MOCK_REPOS } from './constants';
 import { borgService } from './services/borgService';
 import { formatDate } from './utils/formatters';
 
@@ -151,7 +151,7 @@ const App: React.FC = () => {
     const repo = repos.find(r => r.id === repoId);
     if (!repo) return;
 
-    // SILENT MODE: Do not open terminal
+    // SILENT MODE: Do not open terminal initially
     setTerminalTitle(`Mounting ${archiveName}`);
     setTerminalLogs([`Requesting mount of ${repo.url}::${archiveName} to ${path}...`]);
     setIsProcessing(true);
@@ -187,6 +187,18 @@ const App: React.FC = () => {
         };
         setMounts(prev => [...prev, newMount]);
         setCurrentView(View.MOUNTS);
+        
+        // AUTO OPEN EXPLORER ON SUCCESS
+        try {
+            const { ipcRenderer } = (window as any).require('electron');
+            // If it's a linux path, convert for Explorer
+            let explorerPath = path;
+            if (path.startsWith('/')) {
+                 explorerPath = `\\\\wsl$\\Ubuntu${path.replace(/\//g, '\\')}`;
+            }
+            ipcRenderer.send('open-path', explorerPath);
+        } catch(e) { console.error("Could not auto-open explorer"); }
+        
     } else {
         addActivity('Mount Failed', `Failed to mount ${archiveName}: ${result.error || 'Unknown error'}`, 'error');
         setTerminalLogs(prev => [...prev, "Failed to mount."]);
