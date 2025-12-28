@@ -26,34 +26,52 @@ However, I wanted to build a **leaner, more modern alternative** specifically fo
 
 ## 🛠️ Installation & Setup Guide
 
-This guide assumes you are starting with a **fresh Windows 11 PC** and have never used WSL or Borg before.
+This guide is designed for beginners. It assumes you are starting with a standard Windows 10/11 PC and have never used Linux or Borg before.
 
 ### Phase 1: Enable WSL (Windows Subsystem for Linux)
 
-WinBorg relies on a lightweight Linux installation running in the background to handle the heavy lifting.
+WinBorg uses a lightweight Linux (Ubuntu) running in the background to handle the heavy technical work.
 
-1.  Open the **Start Menu**, type `PowerShell`.
+1.  Click the **Start Button**, type `PowerShell`.
 2.  Right-click "Windows PowerShell" and select **Run as Administrator**.
-3.  Type the following command and press Enter:
+3.  Copy and paste the following command, then press **Enter**:
     ```powershell
     wsl --install
     ```
-4.  **Restart your computer** when prompted.
-5.  After restarting, a terminal window will open automatically to finish installing **Ubuntu**. If that's not the case, search in Windows Store for Ubuntu and install it.
-6.  Start Ubuntu, When asked, create a **username** and **password** for your Linux system (remember this password).
+4.  **Restart your computer** when asked.
+5.  **Crucial Step:** After restarting, a terminal window should open automatically to install **Ubuntu**.
+    *   *If it doesn't open automatically:* Search for "Ubuntu" in the Start Menu and open it.
+6.  Wait for the installation to finish. You will be asked to create a **Unix Username** and **Password**.
+    *   *Tip:* When typing the password, nothing will appear on screen. This is normal. Just type it and press Enter.
 
-### Phase 2: Install Borg Dependencies
+### Phase 2: Install Borg Backup Software
 
-Now we need to install the backup software inside the Linux system.
+Now we install the backup engine inside the Linux system.
 
-1.  Open the **Ubuntu** app (or Terminal) from your Start Menu.
-2.  Update your package lists and install Borg + FUSE:
+1.  Open the **Ubuntu** app from your Start Menu.
+2.  Copy and paste this entire command line and press **Enter**:
     ```bash
     sudo apt update && sudo apt install borgbackup fuse3 libfuse2 python3-llfuse python3-pyfuse3 -y
     ```
-    *Note: WinBorg will handle the permission configuration (user_allow_other) automatically for you.*
+3.  Enter the password you created in Phase 1 if prompted.
 
-### Phase 3: Install WinBorg Manager
+### Phase 3: Setup SSH Keys (For Remote Backups)
+
+Most Borg repositories (like Hetzner StorageBox or rsync.net) require an SSH Key instead of a password.
+
+1.  In the **Ubuntu** terminal, verify if you already have a key or create a new one:
+    ```bash
+    ssh-keygen -t ed25519
+    ```
+    *   Press **Enter** 3 times (to accept default path and no passphrase for the key itself).
+2.  Display your new public key:
+    ```bash
+    cat ~/.ssh/id_ed25519.pub
+    ```
+3.  **Copy the output** (it starts with `ssh-ed25519 ...`).
+4.  **Paste this key** into the "Authorized Keys" settings of your backup provider (e.g., Hetzner Console -> StorageBox -> SSH Keys).
+
+### Phase 4: Install WinBorg Manager
 
 1.  Download the latest installer (`.exe`) from the [Releases Page](#).
 2.  Run the installer.
@@ -75,6 +93,7 @@ Manage your backup destinations here.
     *   **Name:** Give it a friendly name (e.g., "Hetzner Box").
     *   **URL:** Enter the SSH URL (e.g., `ssh://u123@u123.your-storagebox.de:23/./backup`).
     *   **Encryption:** Select your mode (Repokey/Keyfile).
+    *   **Trust Host:** Check this if connecting for the first time to avoid SSH errors.
 *   **Lock Status:** If a backup crashed previously, a repository might be "Locked". WinBorg detects `lock.roster` files and shows a **Locked** badge. You can click the **Unlock** button on the card to force-remove these locks.
 *   **Integrity Check:** Click "Verify Integrity" to run a consistency check. WinBorg displays a progress bar and an estimated time of arrival (ETA).
 
@@ -105,8 +124,8 @@ A log of everything WinBorg does.
 ## 🔧 Troubleshooting
 
 **"Connection Closed" or SSH Errors**
-*   Ensure you have generated an SSH key in WSL (`ssh-keygen`) and added the public key to your backup server.
-*   In WinBorg, when adding a repo, verify "Trust Unknown SSH Host" is checked if connecting for the first time.
+*   Did you complete **Phase 3** of the installation guide? Ensure your public key (`id_ed25519.pub`) is uploaded to your backup server.
+*   In WinBorg, when adding a repo, try checking "Trust Unknown SSH Host".
 
 **"Mount Failed: FUSE missing"**
 *   WinBorg tries to fix permissions automatically. If it fails, open Ubuntu and run:
