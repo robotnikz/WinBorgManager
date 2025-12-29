@@ -100,6 +100,19 @@ const parseBorgUrl = (url: string) => {
     return { isSsh: false, path: url };
 };
 
+export interface FileEntry {
+    type: 'd' | 'f' | '-';
+    mode: string;
+    user: string;
+    group: string;
+    uid: number;
+    gid: number;
+    path: string;
+    healthy: boolean;
+    size?: number;
+    mtime?: string;
+}
+
 export const borgService = {
   
   // --- SECRETS MANAGEMENT ---
@@ -125,7 +138,7 @@ export const borgService = {
   runCommand: async (
     args: string[], 
     onLog: (text: string) => void,
-    overrides?: { repoId?: string, disableHostCheck?: boolean, commandId?: string, forceBinary?: string }
+    overrides?: { repoId?: string, disableHostCheck?: boolean, commandId?: string, forceBinary?: string, cwd?: string }
   ): Promise<boolean> => {
     const commandId = overrides?.commandId || Math.random().toString(36).substring(7);
     const config = getBorgConfig();
@@ -144,7 +157,8 @@ export const borgService = {
           executablePath: config.path,
           envVars: getEnvVars(config, overrides),
           forceBinary: overrides?.forceBinary,
-          repoId: overrides?.repoId // SECURE INJECTION TRIGGER
+          repoId: overrides?.repoId, // SECURE INJECTION TRIGGER
+          cwd: overrides?.cwd
       });
       return result.success;
     } finally {
@@ -183,34 +197,9 @@ export const borgService = {
    */
   destroyRepo: async (repoUrl: string, onLog: (text: string) => void, overrides?: { repoId?: string, disableHostCheck?: boolean }) => {
       const args = ['delete', repoUrl];
-      // Inject variable to skip interactive confirmation if possible, though 'delete' usually requires input or env var
-      // BORG_DELETE_I_KNOW_WHAT_I_AM_DOING is required in newer borg versions for non-interactive deletion of whole repo
       const deleteEnv = { 
           BORG_DELETE_I_KNOW_WHAT_I_AM_DOING: 'yes' 
       };
-      
-      // Merge logic for getEnvVars manually here since runCommand calls it internally but we need extra vars
-      // We will rely on runCommand getting base vars, but since we can't easily inject extra vars via current runCommand signature 
-      // without modifying it, we might need a workaround or assume the user will handle standard input via a future update.
-      // However, usually 'borg delete' without arguments is interactive. 
-      // Let's modify logic: We assume `runCommand` handles envs. 
-      // Since `getEnvVars` is internal, we can't inject easily. 
-      // Workaround: We will use the existing envVars but we need to pass this specific flag.
-      // To keep it clean, we'll update getEnvVars or simply note that in typical automation `borg delete repo` is rare.
-      // Wait: `borg delete repo` deletes the whole repo.
-      
-      // Let's patch `getEnvVars` to support custom additions? No, keep it simple.
-      // We will piggyback on the fact that we can't easily pass custom ENV into `runCommand` from here without changing `runCommand` signature.
-      // *Wait*, we can use the `overrides` object if we hack it, but let's just update `runCommand` to accept customEnv if needed later.
-      // For now, let's try standard execution. Most borg versions require the env var.
-      
-      // REFACTOR: Let's assume we modify runCommand to merge `overrides.env` if present? 
-      // Too risky for this change. Let's just trust `delete` works or fails with message.
-      // Actually, let's just make `runCommand` flexible enough or add the Env var to `getEnvVars` globally? No.
-      
-      // Let's update `getEnvVars` in this file to include it always? Safe enough as it only affects delete commands.
-      // Actually, BORG_DELETE_I_KNOW_WHAT_I_AM_DOING is only checked by `borg delete`.
-      
       return await borgService.runCommand(args, onLog, overrides);
   },
 
@@ -373,6 +362,65 @@ export const borgService = {
       }
       return null;
   },
+
+  // --- RESTORE / EXTRACT ---
+
+  getDownloadsPath: async (): Promise<string> => {
+      return await ipcRenderer.invoke('get-downloads-path');
+  },
+
+  listArchiveFiles: async (repoUrl: string, archiveName: string, overrides?: { repoId?: string, disableHostCheck?: boolean }): Promise<FileEntry[]> => {
+      const entries: FileEntry[] = [];
+      let buffer = "";
+      
+      // We use --json-lines to stream output
+      const success = await borgService.runCommand(
+          ['list', '--json-lines', `${repoUrl}::${archiveName}`],
+          (chunk) => {
+              buffer += chunk;
+              // Split by newline and try to parse complete JSON objects
+              const lines = buffer.split('\n');
+              // Keep the last partial line in buffer
+              buffer = lines.pop() || ""; 
+              
+              for (const line of lines) {
+                  if (line.trim()) {
+                      try {
+                          const entry = JSON.parse(line);
+                          if(entry.path) entries.push(entry);
+                      } catch (e) { /* ignore partials */ }
+                  }
+              }
+          },
+          overrides
+      );
+      
+      return success ? entries : [];
+  },
+
+  extractFiles: async (
+      repoUrl: string, 
+      archiveName: string, 
+      paths: string[], // Paths INSIDE the archive
+      destinationPath: string, // Local path (Windows format usually)
+      onLog: (text: string) => void,
+      overrides?: { repoId?: string, disableHostCheck?: boolean }
+  ): Promise<boolean> => {
+      // borg extract repo::archive path/to/file
+      const args = ['extract', '--progress', `${repoUrl}::${archiveName}`, ...paths];
+      
+      // The destinationPath will be handled by the main process (cwd)
+      return await borgService.runCommand(args, onLog, {
+          ...overrides,
+          cwd: destinationPath
+      });
+  },
+
+  openPath: (path: string) => {
+      ipcRenderer.send('open-path', path);
+  },
+
+  // --- MOUNTING ---
 
   stopCommand: async (commandId: string): Promise<boolean> => {
       const result = await ipcRenderer.invoke('borg-stop', { commandId });

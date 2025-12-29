@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Archive, Repository } from '../types';
 import Button from '../components/Button';
-import { Database, Clock, HardDrive, Search, Filter, Calendar, RefreshCw, Info, DownloadCloud, Loader2, ListChecks } from 'lucide-react';
+import { Database, Clock, HardDrive, Search, Filter, Calendar, RefreshCw, Info, DownloadCloud, Loader2, ListChecks, FolderSearch } from 'lucide-react';
+import ArchiveBrowserModal from '../components/ArchiveBrowserModal';
+import TerminalModal from '../components/TerminalModal';
 
 interface ArchivesViewProps {
   archives: Archive[];
@@ -16,6 +18,12 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
   const [loadingInfo, setLoadingInfo] = useState<string | null>(null);
   const [isFetchingAll, setIsFetchingAll] = useState(false);
   
+  // Browser Modal State
+  const [browserArchive, setBrowserArchive] = useState<Archive | null>(null);
+  
+  // Log Modal State (for extraction results)
+  const [logData, setLogData] = useState<{title: string, logs: string[]} | null>(null);
+
   // Basic filtering
   const filteredArchives = archives.filter(a => 
     a.name.toLowerCase().includes(search.toLowerCase())
@@ -61,6 +69,29 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      
+      {/* Archive Browser Modal */}
+      {browserArchive && activeRepo && (
+          <ArchiveBrowserModal 
+             repo={activeRepo}
+             archive={browserArchive}
+             isOpen={!!browserArchive}
+             onClose={() => setBrowserArchive(null)}
+             onLog={(title, logs) => setLogData({ title, logs })}
+          />
+      )}
+
+      {/* Extraction Log Modal */}
+      {logData && (
+          <TerminalModal 
+              isOpen={!!logData}
+              title={logData.title}
+              logs={logData.logs}
+              isProcessing={false}
+              onClose={() => setLogData(null)}
+          />
+      )}
+
       <div className="flex justify-between items-end">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Archives</h1>
@@ -159,16 +190,28 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
                                 {archive.duration === 'Unknown' ? '-' : archive.duration}
                             </td>
                             <td className="px-6 py-4 text-right">
-                                <Button 
-                                    size="sm" 
-                                    variant="secondary" 
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600"
-                                    onClick={() => activeRepo && onMount(activeRepo, archive.name)}
-                                    disabled={isFetchingAll}
-                                >
-                                    <HardDrive className="w-3 h-3 mr-2" />
-                                    Mount
-                                </Button>
+                                <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Button 
+                                        size="sm" 
+                                        variant="secondary" 
+                                        className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600"
+                                        onClick={() => setBrowserArchive(archive)}
+                                        disabled={isFetchingAll}
+                                    >
+                                        <FolderSearch className="w-3 h-3 mr-2" />
+                                        Browse
+                                    </Button>
+                                    <Button 
+                                        size="sm" 
+                                        variant="secondary" 
+                                        className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600"
+                                        onClick={() => activeRepo && onMount(activeRepo, archive.name)}
+                                        disabled={isFetchingAll}
+                                    >
+                                        <HardDrive className="w-3 h-3 mr-2" />
+                                        Mount
+                                    </Button>
+                                </div>
                             </td>
                         </tr>
                     ))

@@ -1,4 +1,5 @@
 
+
 /**
  * REAL BACKEND FOR WINBORG
  */
@@ -7,6 +8,7 @@ const { app, BrowserWindow, ipcMain, shell, Tray, Menu, safeStorage, nativeImage
 const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 let mainWindow;
 let tray = null;
@@ -200,9 +202,14 @@ function getEnv(customEnv) {
     return { ...process.env, ...customEnv };
 }
 
+// --- SYSTEM PATHS ---
+ipcMain.handle('get-downloads-path', () => {
+    return app.getPath('downloads');
+});
+
 // --- BORG EXECUTION ---
 
-ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, envVars, forceBinary, wslUser, repoId }) => {
+ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, envVars, forceBinary, wslUser, repoId, cwd }) => {
   return new Promise((resolve) => {
     let bin, finalArgs;
     const targetBinary = forceBinary || 'borg';
@@ -219,10 +226,27 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
 
     if (useWsl) {
         bin = 'wsl'; 
-        if (wslUser) {
-            finalArgs = ['-u', wslUser, '--exec', targetBinary, ...args];
+        // If CWD is provided (for extraction), we need to handle it.
+        // WSL spawn doesn't accept a Windows CWD directly if we want to run the command inside that folder in Linux context.
+        // Strategy: Use "cd /path && borg ..." wrapped in shell
+        if (cwd) {
+            // Convert C:\Path to /mnt/c/Path for WSL
+            let wslCwd = cwd;
+            if (/^[a-zA-Z]:/.test(cwd)) {
+                const drive = cwd.charAt(0).toLowerCase();
+                const pathPart = cwd.slice(2).replace(/\\/g, '/');
+                wslCwd = `/mnt/${drive}${pathPart}`;
+            }
+            
+            // For extraction, we must wrap in shell to handle 'cd'
+            const cmdString = `cd "${wslCwd}" && ${targetBinary} ${args.map(a => `"${a}"`).join(' ')}`;
+            finalArgs = wslUser ? ['-u', wslUser, '--exec', 'sh', '-c', cmdString] : ['--exec', 'sh', '-c', cmdString];
         } else {
-            finalArgs = ['--exec', targetBinary, ...args];
+            if (wslUser) {
+                finalArgs = ['-u', wslUser, '--exec', targetBinary, ...args];
+            } else {
+                finalArgs = ['--exec', targetBinary, ...args];
+            }
         }
     } else {
         bin = (targetBinary === 'borg') ? (executablePath || 'borg') : targetBinary;
@@ -234,7 +258,9 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
     try {
         const child = spawn(bin, finalArgs, {
           env: getEnv(vars),
-          shell: !useWsl 
+          shell: !useWsl,
+          // Only apply native CWD if NOT using WSL (WSL handled via shell wrap above)
+          cwd: (!useWsl && cwd) ? cwd : undefined
         });
 
         activeProcesses.set(commandId, child);
