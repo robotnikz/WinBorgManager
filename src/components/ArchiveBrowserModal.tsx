@@ -11,6 +11,7 @@ interface ArchiveBrowserModalProps {
   isOpen: boolean;
   onClose: () => void;
   onLog: (title: string, logs: string[]) => void;
+  onExtractSuccess?: (path: string) => void;
 }
 
 // Simple Tree Node Structure
@@ -22,7 +23,7 @@ interface TreeNode {
     children?: { [key: string]: TreeNode };
 }
 
-const ArchiveBrowserModal: React.FC<ArchiveBrowserModalProps> = ({ repo, archive, isOpen, onClose, onLog }) => {
+const ArchiveBrowserModal: React.FC<ArchiveBrowserModalProps> = ({ repo, archive, isOpen, onClose, onLog, onExtractSuccess }) => {
   const [loading, setLoading] = useState(true);
   const [fileList, setFileList] = useState<FileEntry[]>([]);
   const [currentPath, setCurrentPath] = useState<string[]>([]); // Current directory stack
@@ -165,12 +166,15 @@ const ArchiveBrowserModal: React.FC<ArchiveBrowserModalProps> = ({ repo, archive
           );
 
           if (success) {
-              const msg = `Files extracted to: ${restoreFolder}`;
-              logCollector.push(msg);
-              onLog(`Extraction Complete`, logCollector);
-              
-              // Open folder
-              borgService.openPath(restoreFolder);
+              if (onExtractSuccess) {
+                  onExtractSuccess(restoreFolder);
+              } else {
+                  // Fallback for when no success handler is provided (legacy)
+                  const msg = `Files extracted to: ${restoreFolder}`;
+                  logCollector.push(msg);
+                  onLog(`Extraction Complete`, logCollector);
+                  borgService.openPath(restoreFolder);
+              }
               onClose();
           } else {
               onLog(`Extraction Failed`, logCollector);

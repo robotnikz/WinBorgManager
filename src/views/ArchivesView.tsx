@@ -4,6 +4,7 @@ import Button from '../components/Button';
 import { Database, Clock, HardDrive, Search, Filter, Calendar, RefreshCw, Info, DownloadCloud, Loader2, ListChecks, FolderSearch } from 'lucide-react';
 import ArchiveBrowserModal from '../components/ArchiveBrowserModal';
 import TerminalModal from '../components/TerminalModal';
+import ExtractionSuccessModal from '../components/ExtractionSuccessModal';
 
 interface ArchivesViewProps {
   archives: Archive[];
@@ -21,8 +22,11 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
   // Browser Modal State
   const [browserArchive, setBrowserArchive] = useState<Archive | null>(null);
   
-  // Log Modal State (for extraction results)
+  // Log Modal State (for extraction errors)
   const [logData, setLogData] = useState<{title: string, logs: string[]} | null>(null);
+
+  // Success Modal State
+  const [successPath, setSuccessPath] = useState<string | null>(null);
 
   // Basic filtering
   const filteredArchives = archives.filter(a => 
@@ -78,10 +82,11 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
              isOpen={!!browserArchive}
              onClose={() => setBrowserArchive(null)}
              onLog={(title, logs) => setLogData({ title, logs })}
+             onExtractSuccess={(path) => setSuccessPath(path)}
           />
       )}
 
-      {/* Extraction Log Modal */}
+      {/* Extraction Log Modal (Errors) */}
       {logData && (
           <TerminalModal 
               isOpen={!!logData}
@@ -91,6 +96,13 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
               onClose={() => setLogData(null)}
           />
       )}
+
+      {/* Extraction Success Modal */}
+      <ExtractionSuccessModal 
+          isOpen={!!successPath}
+          path={successPath || ''}
+          onClose={() => setSuccessPath(null)}
+      />
 
       <div className="flex justify-between items-end">
         <div>
