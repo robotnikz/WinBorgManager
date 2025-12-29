@@ -8,7 +8,7 @@ import DeleteRepoModal from '../components/DeleteRepoModal';
 import CreateBackupModal from '../components/CreateBackupModal';
 import JobsModal from '../components/JobsModal';
 import Button from '../components/Button';
-import { Plus, Search, X, Info, Link, FolderPlus, Loader2, Terminal } from 'lucide-react';
+import { Plus, Search, X, Info, Link, FolderPlus, Loader2, Terminal, Cloud, Check, AlertTriangle } from 'lucide-react';
 import { borgService } from '../services/borgService';
 
 interface RepositoriesViewProps {
@@ -42,6 +42,11 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({
   const [isInitializing, setIsInitializing] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [initLog, setInitLog] = useState<string>('');
+
+  // TEST CONNECTION STATE
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
+  const [testLog, setTestLog] = useState('');
 
   // Modals
   const [maintenanceRepo, setMaintenanceRepo] = useState<Repository | null>(null);
@@ -87,6 +92,8 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({
       setIsInitializing(false);
       setInitError(null);
       setIsModalOpen(true);
+      setTestResult(null);
+      setTestLog('');
   };
 
   const handleOpenEdit = async (repo: Repository) => {
@@ -101,6 +108,40 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({
       setEditingRepoId(repo.id);
       setAddMode('connect'); // Edit implies connection settings
       setIsModalOpen(true);
+      setTestResult(null);
+      setTestLog('');
+  };
+
+  const handleTestConnection = async () => {
+      setIsTesting(true);
+      setTestLog('Starting connection test...\n');
+      setTestResult(null);
+      
+      const success = await borgService.testConnection(
+          repoForm.url,
+          (log) => setTestLog(prev => prev + log),
+          { disableHostCheck: repoForm.trustHost }
+      );
+      
+      setTestResult(success ? 'success' : 'error');
+      setIsTesting(false);
+  };
+  
+  const handleApplyTemplate = (provider: 'hetzner' | 'rsync' | 'nas' | 'borgbase') => {
+      switch (provider) {
+          case 'hetzner':
+              setRepoForm({ ...repoForm, name: 'Hetzner StorageBox', url: 'ssh://uXXXXXX@uXXXXXX.your-storagebox.de:23/./backups/repo1', trustHost: true });
+              break;
+          case 'rsync':
+              setRepoForm({ ...repoForm, name: 'Rsync.net', url: 'ssh://user@host.rsync.net:22/./repo1', trustHost: true });
+              break;
+          case 'borgbase':
+              setRepoForm({ ...repoForm, name: 'BorgBase', url: 'ssh://user@repo.borgbase.com:22/./repo', trustHost: true });
+              break;
+          case 'nas':
+              setRepoForm({ ...repoForm, name: 'Local NAS', url: 'ssh://admin@192.168.1.50:22/volume1/backups/repo1', trustHost: true });
+              break;
+      }
   };
 
   const handleSave = async () => {
@@ -254,7 +295,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({
           </div>
       )}
 
-      {/* Add/Edit Modal omitted for brevity, same as before */}
+      {/* Add/Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[2px] p-4 animate-in fade-in duration-200">
            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-gray-100 dark:border-slate-700 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 ring-1 ring-black/5 flex flex-col max-h-[90vh]">
@@ -290,30 +331,20 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({
              
              <div className="p-6 space-y-4 overflow-y-auto flex-1">
                
-               {!editingRepoId && addMode === 'connect' && (
-                   <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex gap-3">
-                       <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-                       <div className="text-xs text-blue-800 dark:text-blue-300 leading-relaxed">
-                           <strong>Connect Existing</strong><br/>
-                           Enter the URL of an already initialized Borg repository.
+               {/* Quick Templates */}
+               {!editingRepoId && !repoForm.url && (
+                   <div className="mb-4">
+                       <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Provider Templates</label>
+                       <div className="grid grid-cols-2 gap-2">
+                           <button onClick={() => handleApplyTemplate('hetzner')} className="p-2 border border-gray-200 dark:border-slate-700 rounded hover:bg-gray-50 dark:hover:bg-slate-700 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                               <Cloud className="w-3 h-3" /> Hetzner
+                           </button>
+                           <button onClick={() => handleApplyTemplate('borgbase')} className="p-2 border border-gray-200 dark:border-slate-700 rounded hover:bg-gray-50 dark:hover:bg-slate-700 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                               <Cloud className="w-3 h-3" /> BorgBase
+                           </button>
                        </div>
                    </div>
                )}
-
-               {!editingRepoId && addMode === 'init' && (
-                   <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-3 flex gap-3">
-                       <FolderPlus className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
-                       <div className="text-xs text-indigo-800 dark:text-indigo-300 leading-relaxed">
-                           <strong>Initialize New</strong><br/>
-                           This will create a new, empty Borg repository at the specified location using <code>borg init</code>.
-                       </div>
-                   </div>
-               )}
-
-               <div className="flex items-center gap-2 text-xs bg-slate-100 dark:bg-slate-700 p-2 rounded text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600">
-                   <Terminal className="w-3 h-3" />
-                   <span>Backend: <strong>{useWsl ? "WSL (Ubuntu/Linux)" : "Windows Native"}</strong></span>
-               </div>
 
                <div>
                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Name</label>
@@ -411,6 +442,29 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({
                  </div>
                </div>
                
+               {/* Test Connection Button */}
+               {!editingRepoId && addMode === 'connect' && repoForm.url && (
+                   <div className="pt-2">
+                       <Button 
+                            variant="secondary" 
+                            size="sm"
+                            className="w-full border-blue-200 dark:border-slate-600" 
+                            onClick={handleTestConnection}
+                            disabled={isTesting}
+                       >
+                           {isTesting ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <Terminal className="w-3 h-3 mr-2" />}
+                           {isTesting ? 'Testing...' : 'Test Connection'}
+                       </Button>
+                       {testResult === 'success' && <p className="text-xs text-green-600 mt-1 flex items-center gap-1"><Check className="w-3 h-3" /> Connection successful!</p>}
+                       {testResult === 'error' && (
+                           <div className="mt-1 text-xs text-red-600 bg-red-50 dark:bg-red-900/10 p-2 rounded">
+                               <p className="font-bold flex items-center gap-1"><AlertTriangle className="w-3 h-3"/> Connection failed</p>
+                               <div className="truncate text-[10px] mt-1 font-mono">{testLog.slice(0, 100)}...</div>
+                           </div>
+                       )}
+                   </div>
+               )}
+
                {initError && (
                    <div className="p-3 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-xs rounded-lg border border-red-200 dark:border-red-800">
                        <strong>Error:</strong> {initError}
@@ -460,7 +514,6 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({
         />
       </div>
 
-      {/* CHANGED FROM lg:grid-cols-3 to lg:grid-cols-2 to give cards more width */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {filteredRepos.map(repo => (
           <RepoCard 

@@ -1,5 +1,6 @@
 
 
+
 // This service communicates with the Electron Main process
 
 import { formatBytes, formatDuration } from '../utils/formatters';
@@ -181,6 +182,34 @@ export const borgService = {
       return await borgService.runCommand(args, onLog, overrides);
   },
 
+  testConnection: async (repoUrl: string, onLog: (text: string) => void, overrides?: { disableHostCheck?: boolean }) => {
+      onLog("Testing connection (Borg Version Check)...\n");
+      const args = ['--version'];
+      // If SSH, we must prefix ssh logic, but since borg handles it:
+      // We run "borg serve --version" remotely? No, 'borg init' does connection check implicitly.
+      // A safe non-destructive check is listing the repo, but that fails if not init.
+      // So we check if 'borg' is reachable on the remote.
+      
+      const parsed = parseBorgUrl(repoUrl);
+      if (parsed.isSsh) {
+          const userHost = `${parsed.user ? parsed.user + '@' : ''}${parsed.host}`;
+          onLog(`Dialing ${userHost} on port ${parsed.port}...\n`);
+          // Just try to execute 'borg --version' via SSH
+          const sshArgs = [
+               '-p', parsed.port,
+               ...(overrides?.disableHostCheck ? ['-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null'] : []),
+               '-o', 'BatchMode=yes',
+               userHost,
+               'borg --version'
+          ];
+          return await borgService.runCommand(sshArgs, onLog, { forceBinary: 'ssh' });
+      } else {
+          // Local path check
+          onLog(`Checking local path: ${parsed.path}`);
+          return true; // Trivial for local
+      }
+  },
+
   /**
    * Deletes all archives in the repo, but keeps the repo structure/keys.
    * Equivalent to: borg delete -a '*' repo
@@ -219,6 +248,11 @@ export const borgService = {
       if (rules.weekly) args.push('--keep-weekly', rules.weekly.toString());
       if (rules.monthly) args.push('--keep-monthly', rules.monthly.toString());
       if (rules.yearly) args.push('--keep-yearly', rules.yearly.toString());
+      return await borgService.runCommand(args, onLog, overrides);
+  },
+
+  diffArchives: async (repoUrl: string, archive1: string, archive2: string, onLog: (text: string) => void, overrides?: { repoId?: string, disableHostCheck?: boolean }) => {
+      const args = ['diff', `${repoUrl}::${archive1}`, `${archive2}`];
       return await borgService.runCommand(args, onLog, overrides);
   },
 

@@ -1,10 +1,12 @@
+
 import React, { useState } from 'react';
 import { Archive, Repository } from '../types';
 import Button from '../components/Button';
-import { Database, Clock, HardDrive, Search, Filter, Calendar, RefreshCw, Info, DownloadCloud, Loader2, ListChecks, FolderSearch } from 'lucide-react';
+import { Database, Clock, HardDrive, Search, Filter, Calendar, RefreshCw, Info, DownloadCloud, Loader2, ListChecks, FolderSearch, GitCompare } from 'lucide-react';
 import ArchiveBrowserModal from '../components/ArchiveBrowserModal';
 import TerminalModal from '../components/TerminalModal';
 import ExtractionSuccessModal from '../components/ExtractionSuccessModal';
+import { borgService } from '../services/borgService';
 
 interface ArchivesViewProps {
   archives: Archive[];
@@ -18,6 +20,12 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
   const [search, setSearch] = useState('');
   const [loadingInfo, setLoadingInfo] = useState<string | null>(null);
   const [isFetchingAll, setIsFetchingAll] = useState(false);
+  
+  // Selection for Diff
+  const [selectedArchives, setSelectedArchives] = useState<string[]>([]);
+  const [diffLogs, setDiffLogs] = useState<string[]>([]);
+  const [isDiffOpen, setIsDiffOpen] = useState(false);
+  const [isDiffing, setIsDiffing] = useState(false);
   
   // Browser Modal State
   const [browserArchive, setBrowserArchive] = useState<Archive | null>(null);
@@ -48,27 +56,60 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
       if (!onGetInfo || !activeRepo) return;
       
       setIsFetchingAll(true);
-      
-      // Only process archives that don't have stats yet to save time
       const targets = filteredArchives.filter(a => a.size === 'Unknown');
       
-      // Process sequentially to prevent locking issues or spawning 100 processes
       for (const archive of targets) {
-          // Check if we should stop (could add an abort controller logic later, simple check for now)
           if (!activeRepo) break; 
-          
-          setLoadingInfo(archive.name); // Visual feedback on current item
+          setLoadingInfo(archive.name);
           try {
               await onGetInfo(archive.name);
           } catch (e) {
               console.error(`Failed to fetch info for ${archive.name}`, e);
           }
-          // Small breathing room for UI
           await new Promise(r => setTimeout(r, 200));
       }
       
       setLoadingInfo(null);
       setIsFetchingAll(false);
+  };
+
+  const toggleSelection = (archiveName: string) => {
+      if (selectedArchives.includes(archiveName)) {
+          setSelectedArchives(prev => prev.filter(n => n !== archiveName));
+      } else {
+          // Max 2
+          if (selectedArchives.length < 2) {
+             setSelectedArchives(prev => [...prev, archiveName]);
+          } else {
+             // Replace last
+             setSelectedArchives(prev => [prev[0], archiveName]);
+          }
+      }
+  };
+
+  const handleCompare = async () => {
+      if (selectedArchives.length !== 2 || !activeRepo) return;
+      setIsDiffing(true);
+      setIsDiffOpen(true);
+      setDiffLogs([]);
+
+      // Sort chronological roughly? (Assume names contain dates or ID order in list is chrono reversed)
+      // Usually borg diff old new
+      // We pass them in order of selection, user needs to understand output
+      
+      try {
+          await borgService.diffArchives(
+              activeRepo.url,
+              selectedArchives[1], // Newer (Usually higher in list if selecting top down)
+              selectedArchives[0], // Older
+              (log) => setDiffLogs(prev => [...prev, log]),
+              { repoId: activeRepo.id, disableHostCheck: activeRepo.trustHost }
+          );
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setIsDiffing(false);
+      }
   };
 
   return (
@@ -96,6 +137,15 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
               onClose={() => setLogData(null)}
           />
       )}
+      
+      {/* Diff Output Modal */}
+      <TerminalModal 
+          isOpen={isDiffOpen}
+          title={`Comparing: ${selectedArchives[0]} vs ${selectedArchives[1]}`}
+          logs={diffLogs}
+          isProcessing={isDiffing}
+          onClose={() => setIsDiffOpen(false)}
+      />
 
       {/* Extraction Success Modal */}
       <ExtractionSuccessModal 
@@ -125,6 +175,17 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
                 />
             </div>
             
+            {/* Diff Button */}
+            {selectedArchives.length === 2 && (
+                <Button 
+                    onClick={handleCompare}
+                    className="bg-purple-600 hover:bg-purple-700 text-white animate-in zoom-in"
+                >
+                    <GitCompare className="w-4 h-4 mr-2" />
+                    Diff ({selectedArchives.length})
+                </Button>
+            )}
+            
             <Button 
                 variant="secondary" 
                 onClick={handleFetchAllStats} 
@@ -146,6 +207,7 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
          <table className="w-full text-sm text-left">
             <thead className="bg-gray-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 font-medium border-b border-gray-100 dark:border-slate-700">
                 <tr>
+                    <th className="px-3 py-3 w-10"></th>
                     <th className="px-6 py-3">Archive Name</th>
                     <th className="px-6 py-3">Time</th>
                     <th className="px-6 py-3">Size</th>
@@ -156,7 +218,7 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
             <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
                 {filteredArchives.length === 0 ? (
                     <tr>
-                        <td colSpan={5} className="px-6 py-12 text-center text-slate-400 dark:text-slate-500">
+                        <td colSpan={6} className="px-6 py-12 text-center text-slate-400 dark:text-slate-500">
                             <Database className="w-8 h-8 mx-auto mb-3 opacity-50" />
                             <p className="mb-4">{activeRepo ? "No archives found or list is empty." : "Connect to a repository to see archives."}</p>
                             {activeRepo && (
@@ -168,8 +230,18 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
                         </td>
                     </tr>
                 ) : (
-                    filteredArchives.map((archive) => (
-                        <tr key={archive.id} className="hover:bg-blue-50/50 dark:hover:bg-slate-700/50 transition-colors group">
+                    filteredArchives.map((archive) => {
+                        const isSelected = selectedArchives.includes(archive.name);
+                        return (
+                        <tr key={archive.id} className={`hover:bg-blue-50/50 dark:hover:bg-slate-700/50 transition-colors group ${isSelected ? 'bg-purple-50 dark:bg-purple-900/10' : ''}`}>
+                            <td className="px-3 py-4 text-center">
+                                <input 
+                                    type="checkbox" 
+                                    className="rounded border-gray-300 dark:border-slate-600 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                                    checked={isSelected}
+                                    onChange={() => toggleSelection(archive.name)}
+                                />
+                            </td>
                             <td className="px-6 py-4 font-medium text-slate-800 dark:text-slate-200 flex items-center gap-3">
                                 <div className="p-2 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-lg">
                                     <Database className="w-4 h-4" />
@@ -226,7 +298,8 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
                                 </div>
                             </td>
                         </tr>
-                    ))
+                        );
+                    })
                 )}
             </tbody>
          </table>

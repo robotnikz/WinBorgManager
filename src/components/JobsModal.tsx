@@ -23,7 +23,7 @@ const JobsModal: React.FC<JobsModalProps> = ({ repo, jobs, isOpen, onClose, onAd
   const [jobName, setJobName] = useState('');
   const [sourcePath, setSourcePath] = useState('');
   const [archivePrefix, setArchivePrefix] = useState('');
-  const [compression, setCompression] = useState<BackupJob['compression']>('auto');
+  const [compression, setCompression] = useState<BackupJob['compression']>('zstd');
   
   // Prune State
   const [pruneEnabled, setPruneEnabled] = useState(true);
@@ -70,7 +70,7 @@ const JobsModal: React.FC<JobsModalProps> = ({ repo, jobs, isOpen, onClose, onAd
       setJobName('');
       setSourcePath('');
       setArchivePrefix('');
-      setCompression('auto');
+      setCompression('zstd');
       setPruneEnabled(true);
       setKeepDaily(7);
       setKeepWeekly(4);
@@ -234,12 +234,15 @@ const JobsModal: React.FC<JobsModalProps> = ({ repo, jobs, isOpen, onClose, onAd
                                        value={compression}
                                        onChange={(e) => setCompression(e.target.value as any)}
                                    >
-                                       <option value="auto">Auto (LZ4) - Recommended</option>
-                                       <option value="lz4">LZ4 (Very Fast)</option>
-                                       <option value="zstd">ZSTD (High Compression)</option>
+                                       <option value="zstd">ZSTD (Recommended, Balanced)</option>
+                                       <option value="lz4">LZ4 (Fastest, Larger files)</option>
                                        <option value="zlib">ZLIB (Compatibility)</option>
                                        <option value="none">None</option>
+                                       <option value="auto">Auto (Legacy)</option>
                                    </select>
+                                   <p className="text-[10px] text-slate-400 mt-1">
+                                       ZSTD provides the best balance between speed and compression ratio.
+                                   </p>
                                </div>
                            </>
                        )}
@@ -251,7 +254,7 @@ const JobsModal: React.FC<JobsModalProps> = ({ repo, jobs, isOpen, onClose, onAd
                                    <div className="flex items-center justify-between">
                                        <div>
                                            <h4 className="text-sm font-bold text-blue-900 dark:text-blue-200">Enable Schedule</h4>
-                                           <p className="text-xs text-blue-800 dark:text-blue-300 mt-1">Run this job automatically when the app is open.</p>
+                                           <p className="text-xs text-blue-800 dark:text-blue-300 mt-1">Run this job automatically when the app is open (or minimized).</p>
                                        </div>
                                        <input 
                                            type="checkbox" 
@@ -287,9 +290,6 @@ const JobsModal: React.FC<JobsModalProps> = ({ repo, jobs, isOpen, onClose, onAd
                                            </div>
                                        )}
                                    </div>
-                                   <p className="text-xs text-slate-400 mt-4 italic">
-                                       Note: Scheduling requires WinBorg to be running. If missed, it will run on next launch (implementation pending).
-                                   </p>
                                </div>
                            </>
                        )}

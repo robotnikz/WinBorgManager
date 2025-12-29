@@ -3,7 +3,7 @@
  * REAL BACKEND FOR WINBORG
  */
 
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, safeStorage, nativeImage, dialog, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, safeStorage, nativeImage, dialog, Notification, powerSaveBlocker } = require('electron');
 const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -27,6 +27,9 @@ let schedulerInterval = null;
 const activeMounts = new Map();
 // Keep track of general active processes
 const activeProcesses = new Map();
+
+// POWER BLOCKER STATE
+let powerBlockerId = null;
 
 // SECRETS MANAGEMENT
 const secretsPath = path.join(app.getPath('userData'), 'secrets.json');
@@ -111,6 +114,21 @@ function createWindow() {
   });
 }
 
+// --- POWER SAVE BLOCKER ---
+function updatePowerBlocker() {
+    const isBusy = activeProcesses.size > 0 || activeMounts.size > 0;
+    
+    if (isBusy && !powerBlockerId) {
+        powerBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+        console.log(`[Power] Blocking Sleep (ID: ${powerBlockerId}) - Tasks Running`);
+    } else if (!isBusy && powerBlockerId !== null) {
+        powerSaveBlocker.stop(powerBlockerId);
+        console.log(`[Power] Unblocking Sleep (ID: ${powerBlockerId}) - All Idle`);
+        powerBlockerId = null;
+    }
+    updateTrayMenu(); // Also update tray to reflect status
+}
+
 function createTray() {
     const iconPath = getIconPath();
     if (!iconPath) {
@@ -119,32 +137,15 @@ function createTray() {
     }
     
     try {
-        // Create native image safely
         const image = nativeImage.createFromPath(iconPath);
-        
-        // CRITICAL: Check if image is valid/empty. 
-        if (image.isEmpty()) {
-            console.warn("Tray icon file exists but is invalid/empty:", iconPath);
-            return;
-        }
+        if (image.isEmpty()) return;
 
         const trayIcon = image.resize({ width: 16, height: 16 });
         
         tray = new Tray(trayIcon);
         tray.setToolTip('WinBorg Manager');
         
-        const contextMenu = Menu.buildFromTemplate([
-            { label: 'Open WinBorg', click: () => mainWindow.show() },
-            { type: 'separator' },
-            { label: 'Check for Updates', click: () => checkForUpdates(true) },
-            { type: 'separator' },
-            { label: 'Quit', click: () => {
-                isQuitting = true;
-                app.quit();
-            }}
-        ]);
-        
-        tray.setContextMenu(contextMenu);
+        updateTrayMenu();
         
         // Restore on double click
         tray.on('double-click', () => {
@@ -156,6 +157,60 @@ function createTray() {
     } catch (e) {
         console.warn("Failed to create tray icon:", e);
     }
+}
+
+function updateTrayMenu() {
+    if (!tray) return;
+
+    const template = [
+        { label: 'WinBorg Manager', enabled: false },
+        { label: activeProcesses.size > 0 ? `Running: ${activeProcesses.size} Tasks` : 'Status: Idle', enabled: false },
+        { type: 'separator' },
+        { label: 'Open Dashboard', click: () => mainWindow.show() },
+        { type: 'separator' }
+    ];
+
+    // Add Jobs
+    if (scheduledJobs.length > 0) {
+        template.push({ label: 'Run Backup Job', enabled: false });
+        scheduledJobs.forEach(job => {
+            template.push({
+                label: `▶ ${job.name}`,
+                click: () => executeBackgroundJob(job)
+            });
+        });
+        template.push({ type: 'separator' });
+    }
+
+    // Add Active Mounts
+    if (activeMounts.size > 0) {
+        template.push({ label: 'Active Mounts', enabled: false });
+        // Since activeMounts is a Map<id, process>, we don't have the path readily available in the main process map purely
+        // Simplification: Just offer a generic "Unmount All" or rely on dashboard for specifics.
+        // For better UX, we could store metadata in activeMounts.
+        template.push({
+            label: 'Stop All Mounts',
+            click: () => {
+                activeMounts.forEach((proc, id) => {
+                    proc.kill();
+                    activeMounts.delete(id);
+                });
+                updatePowerBlocker();
+                if(mainWindow) mainWindow.webContents.send('mount-exited', { mountId: 'all', code: 0 });
+            }
+        });
+        template.push({ type: 'separator' });
+    }
+
+    template.push({ label: 'Check for Updates', click: () => checkForUpdates(true) });
+    template.push({ type: 'separator' });
+    template.push({ label: 'Quit', click: () => {
+        isQuitting = true;
+        app.quit();
+    }});
+
+    const contextMenu = Menu.buildFromTemplate(template);
+    tray.setContextMenu(contextMenu);
 }
 
 // --- SCHEDULER LOGIC ---
@@ -206,14 +261,7 @@ async function executeBackgroundJob(job) {
     const timeStr = now.toTimeString().slice(0, 5).replace(':', '');
     const archiveName = `${job.archivePrefix}-${dateStr}-${timeStr}`;
     
-    // Path conversion logic (simplified duplicate from frontend)
-    // We assume backend config "useWsl" matches what frontend sent implicitly, 
-    // but better to read global config.
-    // For simplicity, we assume paths passed in `job.sourcePath` are raw.
-    // We reuse the 'borg-spawn' handler logic by calling it directly via internal helper.
-    
-    const useWsl = true; // Hardcoded default fallback, but should ideally come from settings store
-    // NOTE: In a perfect world, we'd read 'winborg_use_wsl' from a JSON file.
+    const useWsl = true; // Hardcoded default fallback
     
     let sourcePath = job.sourcePath;
     if (useWsl && /^[a-zA-Z]:[\\/]/.test(sourcePath)) {
@@ -256,13 +304,18 @@ async function executeBackgroundJob(job) {
 // Internal helper to run borg without IPC event
 function runBorgInternal(args, repoId, useWsl, jobName) {
     return new Promise((resolve) => {
+        // Manually register "internal" process for power blocker
+        const internalId = `bg-${Date.now()}`;
+        activeProcesses.set(internalId, { kill: () => {} }); // Dummy object just for count
+        updatePowerBlocker();
+
         let bin = 'borg';
         let finalArgs = args;
         const envVars = {
             BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK: 'yes',
             BORG_RELOCATED_REPO_ACCESS_IS_OK: 'yes',
             BORG_DISPLAY_PASSPHRASE: 'no',
-            BORG_RSH: 'ssh -o BatchMode=yes -o StrictHostKeyChecking=no' // Defaulting to loose for background tasks
+            BORG_RSH: 'ssh -o BatchMode=yes -o StrictHostKeyChecking=no'
         };
 
         const secret = getDecryptedPassword(repoId);
@@ -280,15 +333,19 @@ function runBorgInternal(args, repoId, useWsl, jobName) {
 
         const child = spawn(bin, finalArgs, { env: { ...process.env, ...envVars } });
         
+        // Replace dummy with real child
+        activeProcesses.set(internalId, child);
+
         let output = '';
         child.stdout.on('data', d => output += d);
         child.stderr.on('data', d => output += d);
 
         child.on('close', (code) => {
+            activeProcesses.delete(internalId);
+            updatePowerBlocker();
+
             console.log(`[Background Job] ${jobName} finished with code ${code}`);
-            if (code !== 0) console.error(output);
             
-            // Send log to frontend activity log if possible
             if (mainWindow) {
                 mainWindow.webContents.send('activity-log', {
                     title: code === 0 ? 'Scheduled Backup Success' : 'Scheduled Backup Failed',
@@ -403,6 +460,7 @@ ipcMain.on('sync-scheduler-data', (event, { jobs, repos }) => {
     console.log(`[Scheduler] Synced ${jobs.length} jobs and ${repos.length} repos.`);
     scheduledJobs = jobs;
     availableRepos = repos;
+    updateTrayMenu();
 });
 
 ipcMain.handle('check-for-updates', async () => {
@@ -543,6 +601,7 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
         });
 
         activeProcesses.set(commandId, child);
+        updatePowerBlocker(); // Update blocker state
 
         child.stdout.on('data', (data) => {
           if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: data.toString() });
@@ -555,16 +614,19 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
 
         child.on('close', (code) => {
           activeProcesses.delete(commandId);
+          updatePowerBlocker(); // Update blocker state
           resolve({ success: code === 0, code });
         });
 
         child.on('error', (err) => {
           activeProcesses.delete(commandId);
+          updatePowerBlocker();
           if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: `Error: ${err.message}` });
           resolve({ success: false, error: err.message });
         });
     } catch (e) {
         activeProcesses.delete(commandId);
+        updatePowerBlocker();
         resolve({ success: false, error: e.message });
     }
   });
@@ -613,6 +675,8 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
         });
 
         activeMounts.set(mountId, child);
+        updatePowerBlocker();
+        updateTrayMenu();
 
         child.stderr.on('data', (data) => {
           const text = data.toString();
@@ -621,6 +685,8 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
 
         child.on('close', (code) => {
           activeMounts.delete(mountId);
+          updatePowerBlocker();
+          updateTrayMenu();
           if (mainWindow) mainWindow.webContents.send('mount-exited', { mountId, code });
         });
 
@@ -642,6 +708,8 @@ ipcMain.handle('borg-unmount', (event, { mountId, localPath, useWsl, executableP
     if (activeMounts.has(mountId)) {
         activeMounts.get(mountId).kill(); 
         activeMounts.delete(mountId);
+        updatePowerBlocker();
+        updateTrayMenu();
     }
     const cmd = useWsl ? `wsl --exec fusermount3 -u -z ${localPath}` : `"${executablePath||'borg'}" umount ${localPath}`;
     exec(cmd, () => resolve({ success: true }));
