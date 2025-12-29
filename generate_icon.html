@@ -13,19 +13,26 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            min-height: 100vh;
             margin: 0;
             gap: 20px;
         }
-        .canvas-container {
+        .container {
             background: #1e293b;
             padding: 40px;
             border-radius: 20px;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
             text-align: center;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+        }
+        /* Make SVG visible this time */
+        svg {
+            display: block;
+            margin: 0 auto;
+            width: 256px;
+            height: 256px;
+            border-radius: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            background: transparent;
         }
         button {
             background: #3b82f6;
@@ -36,42 +43,24 @@
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            transition: background 0.2s, opacity 0.2s;
-            margin-top: 20px;
+            transition: background 0.2s;
+            margin-top: 25px;
         }
-        button:disabled {
-            background: #475569;
-            cursor: not-allowed;
-            opacity: 0.7;
-        }
-        button:hover:not(:disabled) {
+        button:hover {
             background: #2563eb;
         }
         p {
             color: #94a3b8;
-            max-width: 400px;
-            line-height: 1.5;
-            margin-top: 20px;
-        }
-        canvas {
-            border-radius: 20px;
-            background: transparent;
-            max-width: 256px; /* Display smaller but render full res */
-            max-height: 256px;
-            border: 2px solid #334155;
-        }
-        #status {
-            margin-top: 10px;
-            font-weight: bold;
-            color: #fbbf24;
+            font-size: 14px;
+            margin-top: 15px;
         }
     </style>
 </head>
 <body>
 
-    <div class="canvas-container">
-        <!-- SVG Source (Hidden) -->
-        <svg id="sourceSvg" xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" style="position:absolute; top:-9999px; left:-9999px;">
+    <div class="container">
+        <!-- SVG is directly visible now -->
+        <svg id="previewSvg" xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
             <defs>
                 <linearGradient id="bg_grad" x1="0%" y1="0%" x2="0%" y2="100%">
                     <stop offset="0%" stop-color="#1e293b" />
@@ -90,85 +79,61 @@
                 </filter>
             </defs>
             
-            <!-- App Icon Background Container -->
+            <!-- App Icon Background -->
             <rect x="0" y="0" width="512" height="512" rx="115" fill="url(#bg_grad)" />
             <rect x="0" y="0" width="512" height="512" rx="115" fill="none" stroke="#334155" stroke-width="8" opacity="0.5" />
             
-            <!-- Centered Logo Group -->
+            <!-- Logo Group -->
             <g transform="translate(128, 128)" filter="url(#shadow)">
-                 <!-- Main Cube Shape -->
                 <path d="M128 232L48 186V94L128 48L208 94V186L128 232Z" fill="url(#cube_grad)" stroke="#1e40af" stroke-width="4" stroke-linejoin="round"/>
-                <!-- Top Face -->
                 <path d="M128 48L208 94L128 140L48 94L128 48Z" fill="url(#cube_top)" stroke="#60a5fa" stroke-width="2"/>
-                <!-- Inner Structure -->
                 <path d="M128 140V232" stroke="#1e3a8a" stroke-width="4" opacity="0.3"/>
                 <path d="M128 140L208 186" stroke="#1e3a8a" stroke-width="2" opacity="0.3"/>
                 <path d="M128 140L48 186" stroke="#1e3a8a" stroke-width="2" opacity="0.3"/>
-                <!-- Glowing Core / W -->
                 <path d="M96 110L128 128L160 110" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
                 <path d="M128 128V160" stroke="white" stroke-width="8" stroke-linecap="round" opacity="0.7"/>
                 <circle cx="128" cy="128" r="6" fill="white" />
             </g>
         </svg>
 
-        <canvas id="iconCanvas" width="512" height="512"></canvas>
-        <div id="status">Generating...</div>
-        <button id="downloadBtn" onclick="downloadIcon()" disabled>Download Icon (.png)</button>
+        <button onclick="downloadPng()">Icon herunterladen</button>
+        <p>Falls das Bild oben sichtbar ist, klicke auf den Button.</p>
     </div>
 
-    <p>
-        <strong>Anleitung:</strong><br>
-        1. Warte, bis das Bild oben erscheint und der Button blau wird.<br>
-        2. Klicke auf "Download Icon".<br>
-        3. Speichere die Datei als <code>icon.png</code> im Ordner <code>public/</code>.<br>
-        4. Starte die App neu.
-    </p>
+    <!-- Hidden canvas for conversion -->
+    <canvas id="renderCanvas" width="512" height="512" style="display:none;"></canvas>
 
     <script>
-        window.onload = function() {
-            const canvas = document.getElementById('iconCanvas');
+        function downloadPng() {
+            const svg = document.getElementById('previewSvg');
+            const canvas = document.getElementById('renderCanvas');
             const ctx = canvas.getContext('2d');
-            const svg = document.getElementById('sourceSvg');
-            const btn = document.getElementById('downloadBtn');
-            const status = document.getElementById('status');
-
-            // 1. Serialize SVG to String
-            const serializer = new XMLSerializer();
-            let source = serializer.serializeToString(svg);
-
-            // 2. Create a Blob (More robust than Base64 btoa)
-            const blob = new Blob([source], {type: 'image/svg+xml;charset=utf-8'});
-            const url = URL.createObjectURL(blob);
-
-            // 3. Load Image
-            const img = new Image();
             
+            // Serialize SVG XML
+            const data = (new XMLSerializer()).serializeToString(svg);
+            
+            // Create Blob URL
+            const svgBlob = new Blob([data], {type: 'image/svg+xml;charset=utf-8'});
+            const url = URL.createObjectURL(svgBlob);
+            
+            const img = new Image();
             img.onload = function() {
-                // 4. Draw to Canvas
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                // Draw to canvas
+                ctx.clearRect(0, 0, 512, 512);
                 ctx.drawImage(img, 0, 0);
                 
-                // 5. Cleanup and Enable Button
+                // Cleanup
                 URL.revokeObjectURL(url);
-                btn.disabled = false;
-                status.innerText = "Ready!";
-                status.style.color = "#4ade80"; // Green
+                
+                // Trigger Download
+                const a = document.createElement('a');
+                a.download = 'icon.png';
+                a.href = canvas.toDataURL('image/png');
+                document.body.appendChild(a); // Firefox support
+                a.click();
+                document.body.removeChild(a);
             };
-
-            img.onerror = function() {
-                status.innerText = "Error generating image";
-                status.style.color = "#ef4444";
-            };
-
             img.src = url;
-        };
-
-        function downloadIcon() {
-            const canvas = document.getElementById('iconCanvas');
-            const link = document.createElement('a');
-            link.download = 'icon.png';
-            link.href = canvas.toDataURL('image/png');
-            link.click();
         }
     </script>
 </body>
