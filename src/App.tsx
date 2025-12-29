@@ -139,10 +139,16 @@ const App: React.FC = () => {
       try {
           const { ipcRenderer } = (window as any).require('electron');
           
-          // Listen for background job completions to refresh UI state
-          const handleJobComplete = (_: any, jobId: string) => {
-              setJobs(prev => prev.map(j => j.id === jobId ? { ...j, lastRun: new Date().toISOString(), status: 'success' } : j));
-              // Also refresh activity log via the generic activity-log listener below
+          const handleJobStarted = (_: any, jobId: string) => {
+              setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'running' } : j));
+          };
+
+          const handleJobComplete = (_: any, { jobId, success }: { jobId: string, success: boolean }) => {
+              setJobs(prev => prev.map(j => j.id === jobId ? { 
+                  ...j, 
+                  status: success ? 'success' : 'error',
+                  lastRun: new Date().toISOString()
+              } : j));
           };
 
           const handleActivityLog = (_: any, log: ActivityLogEntry) => {
@@ -158,10 +164,12 @@ const App: React.FC = () => {
               if(log.status === 'error') toast.error(log.title);
           };
 
+          ipcRenderer.on('job-started', handleJobStarted);
           ipcRenderer.on('job-complete', handleJobComplete);
           ipcRenderer.on('activity-log', handleActivityLog);
 
           return () => {
+              ipcRenderer.removeListener('job-started', handleJobStarted);
               ipcRenderer.removeListener('job-complete', handleJobComplete);
               ipcRenderer.removeListener('activity-log', handleActivityLog);
           };

@@ -254,6 +254,9 @@ async function executeBackgroundJob(job) {
     }
 
     new Notification({ title: 'Backup Started', body: `Job: ${job.name}` }).show();
+    
+    // NOTIFY FRONTEND
+    if (mainWindow) mainWindow.webContents.send('job-started', job.id);
 
     // 1. Prepare Command Args
     const now = new Date();
@@ -294,10 +297,11 @@ async function executeBackgroundJob(job) {
         new Notification({ title: 'Backup Success', body: `Job '${job.name}' finished.` }).show();
         
         // Notify Frontend to refresh if open
-        if (mainWindow) mainWindow.webContents.send('job-complete', job.id);
+        if (mainWindow) mainWindow.webContents.send('job-complete', { jobId: job.id, success: true });
         
     } else {
         new Notification({ title: 'Backup Failed', body: `Job '${job.name}' failed. Check logs.` }).show();
+        if (mainWindow) mainWindow.webContents.send('job-complete', { jobId: job.id, success: false });
     }
 }
 
