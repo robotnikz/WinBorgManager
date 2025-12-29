@@ -194,79 +194,101 @@ const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
+      {/* TOP ROW: ACTIONS & STATS COMBINED */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          
+          {/* Quick Actions (Takes 2 columns on large screens) */}
+          <div className="xl:col-span-2">
+              <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Quick Actions</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  {/* Action 1: New Backup */}
+                  <button 
+                      onClick={handleQuickBackup}
+                      className="p-4 bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 rounded-xl text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 hover:scale-[1.02] transition-all flex flex-col items-start gap-3 h-full"
+                  >
+                      <div className="p-2 bg-white/20 rounded-lg">
+                          <Zap className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="text-left">
+                          <div className="font-bold text-sm">New Backup</div>
+                          <div className="text-[10px] text-blue-100 opacity-80">Create snapshot</div>
+                      </div>
+                  </button>
+
+                  {/* Action 2: Add Repo */}
+                  <button 
+                      onClick={() => onChangeView(View.REPOSITORIES)}
+                      className="p-4 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl hover:border-blue-300 dark:hover:border-blue-500 transition-colors flex flex-col items-start gap-3 group h-full"
+                  >
+                      <div className="p-2 bg-gray-100 dark:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/30 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                          <Plus className="w-5 h-5" />
+                      </div>
+                      <div className="text-left">
+                          <div className="font-bold text-sm text-slate-800 dark:text-slate-200">Add Repo</div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400">Connect new source</div>
+                      </div>
+                  </button>
+
+                  {/* Action 3: Mount Latest */}
+                  <button 
+                      onClick={() => {
+                          const connected = repos.find(r => r.status === 'connected');
+                          if(connected) onQuickMount(connected);
+                          else onChangeView(View.REPOSITORIES);
+                      }}
+                      className="p-4 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl hover:border-indigo-300 dark:hover:border-indigo-500 transition-colors flex flex-col items-start gap-3 group h-full"
+                  >
+                      <div className="p-2 bg-gray-100 dark:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300 group-hover:bg-indigo-50 dark:group-hover:bg-indigo-900/30 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                          <FolderOpen className="w-5 h-5" />
+                      </div>
+                      <div className="text-left">
+                          <div className="font-bold text-sm text-slate-800 dark:text-slate-200">Mount</div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400">Browse latest files</div>
+                      </div>
+                  </button>
+
+                  {/* Action 4: Verify */}
+                  <button 
+                      onClick={handleSmartVerify}
+                      className="p-4 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl hover:border-emerald-300 dark:hover:border-emerald-500 transition-colors flex flex-col items-start gap-3 group h-full"
+                  >
+                      <div className="p-2 bg-gray-100 dark:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-900/30 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                          <ShieldCheck className="w-5 h-5" />
+                      </div>
+                      <div className="text-left">
+                          <div className="font-bold text-sm text-slate-800 dark:text-slate-200">Verify</div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400">Check integrity</div>
+                      </div>
+                  </button>
+              </div>
+          </div>
+
+          {/* Mini Stats (Takes 1 column) */}
+          <div>
+              <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">System Overview</h3>
+              <div className="grid grid-cols-2 gap-4 h-[calc(100%-2rem)]">
+                  <StatCard 
+                      title="Repositories" 
+                      value={stats.totalRepos.toString()} 
+                      icon={Server} 
+                      color="blue"
+                  />
+                  <StatCard 
+                      title="Active Mounts" 
+                      value={stats.activeMounts.toString()} 
+                      icon={HardDrive} 
+                      color="indigo"
+                  />
+              </div>
+          </div>
+      </div>
+
+      {/* BOTTOM ROW: MAIN CONTENT SPLIT */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* LEFT COLUMN: QUICK ACTIONS & REPOS */}
-        <div className="lg:col-span-2 space-y-8">
-            
-            {/* Quick Actions Grid */}
-            <div>
-                <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Quick Actions</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    {/* Action 1: New Backup */}
-                    <button 
-                        onClick={handleQuickBackup}
-                        className="p-4 bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 rounded-xl text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 hover:scale-[1.02] transition-all flex flex-col items-start gap-3"
-                    >
-                        <div className="p-2 bg-white/20 rounded-lg">
-                            <Zap className="w-5 h-5 text-white" />
-                        </div>
-                        <div className="text-left">
-                            <div className="font-bold text-sm">New Backup</div>
-                            <div className="text-[10px] text-blue-100 opacity-80">Create snapshot</div>
-                        </div>
-                    </button>
-
-                    {/* Action 2: Add Repo */}
-                    <button 
-                        onClick={() => onChangeView(View.REPOSITORIES)}
-                        className="p-4 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl hover:border-blue-300 dark:hover:border-blue-500 transition-colors flex flex-col items-start gap-3 group"
-                    >
-                        <div className="p-2 bg-gray-100 dark:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/30 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                            <Plus className="w-5 h-5" />
-                        </div>
-                        <div className="text-left">
-                            <div className="font-bold text-sm text-slate-800 dark:text-slate-200">Add Repo</div>
-                            <div className="text-[10px] text-slate-500 dark:text-slate-400">Connect new source</div>
-                        </div>
-                    </button>
-
-                    {/* Action 3: Mount Latest */}
-                    <button 
-                        onClick={() => {
-                            const connected = repos.find(r => r.status === 'connected');
-                            if(connected) onQuickMount(connected);
-                            else onChangeView(View.REPOSITORIES);
-                        }}
-                        className="p-4 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl hover:border-indigo-300 dark:hover:border-indigo-500 transition-colors flex flex-col items-start gap-3 group"
-                    >
-                        <div className="p-2 bg-gray-100 dark:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300 group-hover:bg-indigo-50 dark:group-hover:bg-indigo-900/30 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                            <FolderOpen className="w-5 h-5" />
-                        </div>
-                        <div className="text-left">
-                            <div className="font-bold text-sm text-slate-800 dark:text-slate-200">Mount</div>
-                            <div className="text-[10px] text-slate-500 dark:text-slate-400">Browse latest files</div>
-                        </div>
-                    </button>
-
-                    {/* Action 4: Verify */}
-                    <button 
-                        onClick={handleSmartVerify}
-                        className="p-4 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl hover:border-emerald-300 dark:hover:border-emerald-500 transition-colors flex flex-col items-start gap-3 group"
-                    >
-                        <div className="p-2 bg-gray-100 dark:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-900/30 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                            <ShieldCheck className="w-5 h-5" />
-                        </div>
-                        <div className="text-left">
-                            <div className="font-bold text-sm text-slate-800 dark:text-slate-200">Verify</div>
-                            <div className="text-[10px] text-slate-500 dark:text-slate-400">Check integrity</div>
-                        </div>
-                    </button>
-                </div>
-            </div>
-
-            {/* Repositories List */}
-            <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden">
+        {/* LEFT COLUMN: REPO LIST (Takes 2/3) */}
+        <div className="lg:col-span-2">
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden h-full">
                 <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-gray-50/50 dark:bg-slate-900/50">
                     <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
                         <Server className="w-4 h-4 text-slate-500" /> Repository Status
@@ -306,8 +328,8 @@ const DashboardView: React.FC<DashboardViewProps> = ({
                                             </div>
                                         </div>
                                         
-                                        {/* Inline Actions */}
-                                        <div className="flex items-center gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                        {/* Inline Actions - ALWAYS VISIBLE */}
+                                        <div className="flex items-center gap-2">
                                             {repo.status === 'connected' ? (
                                                 <>
                                                     <button 
@@ -357,25 +379,9 @@ const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
         </div>
 
-        {/* RIGHT COLUMN: STATS & LOGS */}
+        {/* RIGHT COLUMN: STATS & LOGS (Takes 1/3) */}
         <div className="space-y-8">
             
-            {/* Mini Stats Grid */}
-            <div className="grid grid-cols-2 gap-4">
-                <StatCard 
-                    title="Repositories" 
-                    value={stats.totalRepos.toString()} 
-                    icon={Server} 
-                    color="blue"
-                />
-                <StatCard 
-                    title="Active Mounts" 
-                    value={stats.activeMounts.toString()} 
-                    icon={HardDrive} 
-                    color="indigo"
-                />
-            </div>
-
             {/* Storage Efficiency */}
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
@@ -447,14 +453,14 @@ const StatCard = ({ title, value, icon: Icon, color }: any) => {
     };
 
     return (
-        <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm flex flex-col justify-between h-24">
+        <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm flex flex-col justify-between h-full min-h-[90px]">
             <div className="flex justify-between items-start">
                 <div className={`p-1.5 rounded-lg ${colors[color as keyof typeof colors]}`}>
                     <Icon className="w-4 h-4" />
                 </div>
                 <span className="text-2xl font-bold text-slate-800 dark:text-white">{value}</span>
             </div>
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">{title}</p>
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mt-2">{title}</p>
         </div>
     );
 }
