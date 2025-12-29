@@ -28,8 +28,7 @@
       "target": [
         "nsis",
         "portable"
-      ],
-      "icon": "public/icon.png"
+      ]
     },
     "nsis": {
       "oneClick": false,

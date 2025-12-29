@@ -62,7 +62,15 @@ function getDecryptedPassword(repoId) {
 
 const isDev = !app.isPackaged;
 
+function getIconPath() {
+    // In dev, use public folder. In prod, use dist folder (copied by Vite)
+    const p = isDev ? path.join(__dirname, 'public/icon.png') : path.join(__dirname, 'dist/icon.png');
+    return fs.existsSync(p) ? p : null;
+}
+
 function createWindow() {
+  const iconPath = getIconPath();
+  
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -75,7 +83,7 @@ function createWindow() {
       webSecurity: false 
     },
     backgroundColor: '#f3f3f3',
-    icon: path.join(__dirname, 'public/icon.png'),
+    icon: iconPath, // Can be null, Electron handles it
     titleBarStyle: 'hidden',
     titleBarOverlay: false
   });
@@ -101,25 +109,31 @@ function createWindow() {
 }
 
 function createTray() {
-    const iconPath = path.join(__dirname, 'public/icon.png');
-    const trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16 });
+    const iconPath = getIconPath();
+    if (!iconPath) return; // Skip tray if no icon
     
-    tray = new Tray(trayIcon);
-    tray.setToolTip('WinBorg Manager');
-    
-    const contextMenu = Menu.buildFromTemplate([
-        { label: 'Show WinBorg', click: () => mainWindow.show() },
-        { type: 'separator' },
-        { label: 'Check for Updates', click: () => checkForUpdates(true) },
-        { type: 'separator' },
-        { label: 'Quit', click: () => {
-            isQuitting = true;
-            app.quit();
-        }}
-    ]);
-    
-    tray.setContextMenu(contextMenu);
-    tray.on('double-click', () => mainWindow.show());
+    try {
+        const trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16 });
+        
+        tray = new Tray(trayIcon);
+        tray.setToolTip('WinBorg Manager');
+        
+        const contextMenu = Menu.buildFromTemplate([
+            { label: 'Show WinBorg', click: () => mainWindow.show() },
+            { type: 'separator' },
+            { label: 'Check for Updates', click: () => checkForUpdates(true) },
+            { type: 'separator' },
+            { label: 'Quit', click: () => {
+                isQuitting = true;
+                app.quit();
+            }}
+        ]);
+        
+        tray.setContextMenu(contextMenu);
+        tray.on('double-click', () => mainWindow.show());
+    } catch (e) {
+        console.warn("Failed to create tray icon:", e);
+    }
 }
 
 // --- UPDATE CHECKER LOGIC ---
