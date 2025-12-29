@@ -207,6 +207,18 @@ ipcMain.handle('get-downloads-path', () => {
     return app.getPath('downloads');
 });
 
+ipcMain.handle('create-directory', (event, pathString) => {
+    return new Promise((resolve) => {
+        try {
+            fs.mkdirSync(pathString, { recursive: true });
+            resolve(true);
+        } catch (e) {
+            console.error("Failed to create directory", e);
+            resolve(false);
+        }
+    });
+});
+
 // --- BORG EXECUTION ---
 
 ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, envVars, forceBinary, wslUser, repoId, cwd }) => {

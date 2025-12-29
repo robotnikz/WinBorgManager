@@ -368,6 +368,10 @@ export const borgService = {
   getDownloadsPath: async (): Promise<string> => {
       return await ipcRenderer.invoke('get-downloads-path');
   },
+  
+  createDirectory: async (path: string): Promise<boolean> => {
+      return await ipcRenderer.invoke('create-directory', path);
+  },
 
   listArchiveFiles: async (repoUrl: string, archiveName: string, overrides?: { repoId?: string, disableHostCheck?: boolean }): Promise<FileEntry[]> => {
       const entries: FileEntry[] = [];

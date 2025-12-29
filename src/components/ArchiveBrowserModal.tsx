@@ -143,14 +143,18 @@ const ArchiveBrowserModal: React.FC<ArchiveBrowserModalProps> = ({ repo, archive
           const downloadPath = await borgService.getDownloadsPath();
           const restoreFolder = `${downloadPath}\\WinBorg Restores\\${archive.name}_${Date.now()}`;
           
-          // Create the restore folder via shell logic if needed, but borg will create path structure. 
-          // We need the BASE folder to exist.
-          // For simplicity, we extract to Downloads and let Borg create the path structure.
-          // BUT user wants a clean folder. 
-          // Let's use the standard Downloads path.
-          
           const logCollector: string[] = [];
+
+          // 1. Create directory first (Windows side)
+          const dirCreated = await borgService.createDirectory(restoreFolder);
+          if (!dirCreated) {
+              logCollector.push(`Error: Could not create local directory ${restoreFolder}`);
+              onLog(`Extraction Error`, logCollector);
+              setExtracting(false);
+              return;
+          }
           
+          // 2. Extract into that directory
           const success = await borgService.extractFiles(
               repo.url,
               archive.name,
