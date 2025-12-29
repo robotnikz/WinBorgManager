@@ -731,6 +731,7 @@ const App: React.FC = () => {
            <DashboardView 
               repos={repos} 
               mounts={mounts}
+              jobs={jobs}
               activityLogs={activityLogs}
               onQuickMount={handleQuickMount}
               onConnect={handleConnect}

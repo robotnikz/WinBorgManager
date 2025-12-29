@@ -519,6 +519,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({
           <RepoCard 
             key={repo.id} 
             repo={repo} 
+            jobs={jobs}
             onConnect={onConnect}
             onMount={onMount}
             onCheck={onCheck}

@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Repository, MountPoint, View, ActivityLogEntry } from '../types';
+import { Repository, MountPoint, View, ActivityLogEntry, BackupJob } from '../types';
 import { 
   ShieldCheck, 
   HardDrive, 
@@ -14,14 +14,16 @@ import {
   Play,
   Plus,
   RefreshCw,
-  FolderOpen
+  FolderOpen,
+  CalendarClock
 } from 'lucide-react';
 import Button from '../components/Button';
-import { parseSizeString, formatBytes, formatDate, formatDuration } from '../utils/formatters';
+import { parseSizeString, formatBytes, formatDate, formatDuration, getNextRunForRepo } from '../utils/formatters';
 
 interface DashboardViewProps {
   repos: Repository[];
   mounts: MountPoint[];
+  jobs?: BackupJob[];
   activityLogs: ActivityLogEntry[];
   onQuickMount: (repo: Repository) => void;
   onConnect: (repo: Repository) => void;
@@ -34,7 +36,7 @@ interface DashboardViewProps {
 }
 
 const DashboardView: React.FC<DashboardViewProps> = ({ 
-    repos, mounts, activityLogs, onQuickMount, onConnect, onCheck, onChangeView, onAbortCheck, onOneOffBackup, isDarkMode, toggleTheme 
+    repos, mounts, jobs, activityLogs, onQuickMount, onConnect, onCheck, onChangeView, onAbortCheck, onOneOffBackup, isDarkMode, toggleTheme 
 }) => {
   
   // Real-time Current File Logic
@@ -293,13 +295,22 @@ const DashboardView: React.FC<DashboardViewProps> = ({
                     ) : (
                         repos.map(repo => {
                             const eta = getEta(repo);
+                            const nextRun = jobs ? getNextRunForRepo(jobs, repo.id) : null;
+                            
                             return (
                                 <div key={repo.id} className="px-6 py-4 flex flex-col gap-2 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors group">
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-4 flex-1 overflow-hidden">
                                             <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${repo.status === 'connected' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-gray-300 dark:bg-slate-600'}`}></div>
                                             <div className="min-w-0">
-                                                <div className="font-bold text-sm text-slate-800 dark:text-slate-200 truncate">{repo.name}</div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="font-bold text-sm text-slate-800 dark:text-slate-200 truncate">{repo.name}</div>
+                                                    {nextRun && (
+                                                        <span className="text-[10px] bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 px-1.5 py-0.5 rounded flex items-center gap-1 border border-purple-100 dark:border-purple-800">
+                                                            <CalendarClock className="w-3 h-3" /> {nextRun}
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-0.5">
                                                     <span className="truncate max-w-[200px]">{repo.url}</span>
                                                     

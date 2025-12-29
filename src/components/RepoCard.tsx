@@ -1,10 +1,12 @@
 
 import React from 'react';
-import { Repository } from '../types';
-import { Server, Shield, Clock, HardDrive, Trash2, Loader2, Edit2, ShieldCheck, Unlock, Lock, Wrench, Key, UploadCloud, Briefcase } from 'lucide-react';
+import { Repository, BackupJob } from '../types';
+import { Server, Shield, Clock, HardDrive, Trash2, Loader2, Edit2, ShieldCheck, Unlock, Lock, Wrench, Key, UploadCloud, Briefcase, CalendarClock } from 'lucide-react';
+import { getNextRunForRepo } from '../utils/formatters';
 
 interface RepoCardProps {
   repo: Repository;
+  jobs?: BackupJob[];
   onMount?: (repo: Repository) => void;
   onConnect?: (repo: Repository) => void;
   onDelete?: (repo: Repository) => void;
@@ -17,7 +19,10 @@ interface RepoCardProps {
   onManageJobs?: (repo: Repository) => void;
 }
 
-const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete, onEdit, onCheck, onBreakLock, onMaintenance, onExportKey, onBackup, onManageJobs }) => {
+const RepoCard: React.FC<RepoCardProps> = ({ repo, jobs, onMount, onConnect, onDelete, onEdit, onCheck, onBreakLock, onMaintenance, onExportKey, onBackup, onManageJobs }) => {
+  
+  const nextRun = jobs ? getNextRunForRepo(jobs, repo.id) : null;
+
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200/75 dark:border-slate-700 p-5 shadow-sm hover:shadow-md transition-all duration-200 group relative overflow-hidden flex flex-col h-full">
       
@@ -120,10 +125,17 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
           <HardDrive className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
           <span className="font-medium truncate">{repo.size}</span>
         </div>
-        <div className="flex items-center gap-2.5 text-xs text-slate-600 dark:text-slate-400 col-span-2" title={`Encryption Mode: ${repo.encryption}`}>
+        <div className="flex items-center gap-2.5 text-xs text-slate-600 dark:text-slate-400" title={`Encryption Mode: ${repo.encryption}`}>
           <Shield className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
           <span className="capitalize truncate">{repo.encryption === 'none' ? 'No Encryption' : `${repo.encryption} encryption`}</span>
         </div>
+        {/* Next Backup Indicator */}
+        {nextRun && (
+            <div className="flex items-center gap-2.5 text-xs text-purple-600 dark:text-purple-400 font-medium" title="Next scheduled backup">
+                <CalendarClock className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{nextRun}</span>
+            </div>
+        )}
       </div>
 
       {/* Primary Actions */}
