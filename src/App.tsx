@@ -408,12 +408,14 @@ const App: React.FC = () => {
                 }
 
                 // SUCCESS: Set this one connected, ensure others disconnected
+                // ALSO RESET CHECK STATUS if it was error/aborted to clear dashboard warnings
                 setRepos(prev => prev.map(r => 
                     r.id === repo.id ? { 
                         ...r, 
                         status: 'connected', 
                         lastBackup: newArchives[0]?.time || 'Never',
-                        fileCount: newArchives.length 
+                        fileCount: newArchives.length,
+                        checkStatus: (r.checkStatus === 'error' || r.checkStatus === 'aborted') ? 'idle' : r.checkStatus
                     } : { ...r, status: 'disconnected' }
                 ));
 
@@ -485,7 +487,10 @@ const App: React.FC = () => {
       await checkRepoLock(repo);
 
       setRepos(prev => {
-          if (prev.find(r => r.id === repo.id)?.checkStatus === 'aborted') return prev;
+          // IMPORTANT: If user aborted the check, the command returns fail, but we don't want to set status to 'error'.
+          // We keep it as 'aborted' (yellow) instead of 'error' (red).
+          const current = prev.find(r => r.id === repo.id);
+          if (current?.checkStatus === 'aborted') return prev;
           
           if (success) {
               addActivity('Integrity Check Passed', `Repository ${repo.name} verified.`, 'success');
