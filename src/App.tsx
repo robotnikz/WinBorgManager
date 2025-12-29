@@ -734,7 +734,8 @@ const App: React.FC = () => {
         {/* GLOBAL BACKUP MODAL (ACCESSIBLE FROM DASHBOARD) */}
         {backupRepo && (
           <CreateBackupModal 
-              repo={backupRepo}
+              initialRepo={backupRepo}
+              repos={repos.filter(r => r.status === 'connected')}
               isOpen={!!backupRepo}
               onClose={() => setBackupRepo(null)}
               onLog={(title, logs) => {

@@ -1,20 +1,22 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Repository } from '../types';
 import Button from './Button';
-import { Folder, Save, X, Clock, Terminal, Loader2 } from 'lucide-react';
+import { Folder, Save, X, Clock, Terminal, Loader2, Server } from 'lucide-react';
 import { borgService } from '../services/borgService';
 import { toast } from '../utils/eventBus';
 
 interface CreateBackupModalProps {
-  repo: Repository;
+  initialRepo: Repository;
+  repos?: Repository[]; // List of all available connected repos
   isOpen: boolean;
   onClose: () => void;
   onLog: (title: string, logs: string[]) => void;
   onSuccess: () => void;
 }
 
-const CreateBackupModal: React.FC<CreateBackupModalProps> = ({ repo, isOpen, onClose, onLog, onSuccess }) => {
+const CreateBackupModal: React.FC<CreateBackupModalProps> = ({ initialRepo, repos = [], isOpen, onClose, onLog, onSuccess }) => {
+  const [selectedRepoId, setSelectedRepoId] = useState(initialRepo.id);
   const [sourcePath, setSourcePath] = useState('');
   const [archiveName, setArchiveName] = useState(() => {
       const now = new Date();
@@ -27,7 +29,18 @@ const CreateBackupModal: React.FC<CreateBackupModalProps> = ({ repo, isOpen, onC
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentLog, setCurrentLog] = useState('');
 
+  // Update selected repo if initialRepo changes when opening
+  useEffect(() => {
+      if (isOpen) {
+          setSelectedRepoId(initialRepo.id);
+      }
+  }, [isOpen, initialRepo]);
+
   if (!isOpen) return null;
+
+  // Filter only connected repos for the dropdown, ensure current initial is included just in case
+  const availableRepos = repos.length > 0 ? repos : [initialRepo];
+  const activeRepo = availableRepos.find(r => r.id === selectedRepoId) || initialRepo;
 
   const handleSelectFolder = async () => {
       const paths = await borgService.selectDirectory();
@@ -50,11 +63,11 @@ const CreateBackupModal: React.FC<CreateBackupModalProps> = ({ repo, isOpen, onC
 
       try {
           const success = await borgService.createArchive(
-              repo.url,
+              activeRepo.url,
               archiveName,
               [sourcePath],
               logCollector,
-              { repoId: repo.id, disableHostCheck: repo.trustHost }
+              { repoId: activeRepo.id, disableHostCheck: activeRepo.trustHost }
           );
 
           if (success) {
@@ -82,7 +95,9 @@ const CreateBackupModal: React.FC<CreateBackupModalProps> = ({ repo, isOpen, onC
                        <Save className="w-5 h-5 text-green-600" />
                        Create New Backup
                    </h3>
-                   <p className="text-xs text-slate-500 dark:text-slate-400">Upload to {repo.name}</p>
+                   <p className="text-xs text-slate-500 dark:text-slate-400">
+                       {availableRepos.length > 1 ? 'Select target repository below' : `Upload to ${activeRepo.name}`}
+                   </p>
                </div>
                <button onClick={onClose} disabled={isProcessing} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors disabled:opacity-50">
                  <X size={20} />
@@ -91,6 +106,29 @@ const CreateBackupModal: React.FC<CreateBackupModalProps> = ({ repo, isOpen, onC
 
            <div className="p-6 space-y-5">
                
+               {/* Repository Selection (Only if multiple available) */}
+               {availableRepos.length > 1 && (
+                   <div>
+                       <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Target Repository</label>
+                       <div className="relative">
+                           <Server className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                           <select
+                               className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 text-sm text-slate-900 dark:text-white appearance-none"
+                               value={selectedRepoId}
+                               onChange={(e) => setSelectedRepoId(e.target.value)}
+                               disabled={isProcessing}
+                           >
+                               {availableRepos.map(r => (
+                                   <option key={r.id} value={r.id}>{r.name} ({r.url})</option>
+                               ))}
+                           </select>
+                           <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                                <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                           </div>
+                       </div>
+                   </div>
+               )}
+
                {/* Archive Name Input */}
                <div>
                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Archive Name</label>

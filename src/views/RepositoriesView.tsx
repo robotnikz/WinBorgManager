@@ -254,7 +254,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({
       {/* Create Backup Modal (One-off) */}
       {backupRepo && (
           <CreateBackupModal 
-              repo={backupRepo}
+              initialRepo={backupRepo}
               isOpen={!!backupRepo}
               onClose={() => setBackupRepo(null)}
               onLog={(title, logs) => setLocalLogData({ title, logs })}
