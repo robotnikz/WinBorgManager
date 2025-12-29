@@ -109,13 +109,22 @@ function createWindow() {
 function createTray() {
     const iconPath = getIconPath();
     if (!iconPath) {
-        console.warn("No icon found for tray at:", iconPath);
+        console.warn("No icon path found");
         return; 
     }
     
     try {
-        // Create native image and resize for Tray (usually 16x16 or 32x32 for Windows)
-        const trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+        // Create native image safely
+        const image = nativeImage.createFromPath(iconPath);
+        
+        // CRITICAL: Check if image is valid/empty. 
+        // If public/icon.png is corrupt, this prevents the app from crashing.
+        if (image.isEmpty()) {
+            console.warn("Tray icon file exists but is invalid/empty:", iconPath);
+            return;
+        }
+
+        const trayIcon = image.resize({ width: 16, height: 16 });
         
         tray = new Tray(trayIcon);
         tray.setToolTip('WinBorg Manager');
