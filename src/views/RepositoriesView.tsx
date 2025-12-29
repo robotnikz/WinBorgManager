@@ -3,7 +3,7 @@ import { Repository } from '../types';
 import RepoCard from '../components/RepoCard';
 import MaintenanceModal from '../components/MaintenanceModal';
 import Button from '../components/Button';
-import { Plus, Search, X, ShieldAlert, Key, Terminal, AlertCircle, FilePlus } from 'lucide-react';
+import { Plus, Search, X, ShieldAlert, Key, Terminal, AlertCircle, Info } from 'lucide-react';
 import { borgService } from '../services/borgService';
 
 interface RepositoriesViewProps {
@@ -37,18 +37,13 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
     encryption: 'repokey' | 'keyfile' | 'none';
     passphrase?: string;
     trustHost: boolean;
-    initialize: boolean; // NEW: Init flag
   }>({
     name: '',
     url: '',
     encryption: 'repokey',
     passphrase: '',
-    trustHost: false,
-    initialize: false
+    trustHost: false
   });
-
-  const [initProcessing, setInitProcessing] = useState(false);
-  const [initLogs, setInitLogs] = useState<string[]>([]);
 
   // Check backend mode when modal opens
   useEffect(() => {
@@ -59,10 +54,9 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
   }, [isModalOpen]);
 
   const handleOpenAdd = () => {
-      setRepoForm({ name: '', url: '', encryption: 'repokey', passphrase: '', trustHost: false, initialize: false });
+      setRepoForm({ name: '', url: '', encryption: 'repokey', passphrase: '', trustHost: false });
       setEditingRepoId(null);
       setIsModalOpen(true);
-      setInitLogs([]);
   };
 
   const handleOpenEdit = (repo: Repository) => {
@@ -71,8 +65,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
           url: repo.url,
           encryption: repo.encryption,
           passphrase: repo.passphrase || '',
-          trustHost: repo.trustHost || false,
-          initialize: false
+          trustHost: repo.trustHost || false
       });
       setEditingRepoId(repo.id);
       setIsModalOpen(true);
@@ -84,33 +77,9 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
             onEditRepo(editingRepoId, repoForm);
             setIsModalOpen(false);
         } else {
-            // New Repo Logic
-            if (repoForm.initialize) {
-                // RUN BORG INIT
-                setInitProcessing(true);
-                setInitLogs(['Starting initialization...']);
-                
-                const success = await borgService.init(
-                    repoForm.url,
-                    repoForm.encryption,
-                    (log) => setInitLogs(prev => [...prev, log]),
-                    { passphrase: repoForm.passphrase, disableHostCheck: repoForm.trustHost }
-                );
-
-                setInitProcessing(false);
-                if (success) {
-                    // If successful, add to list and close
-                    onAddRepo(repoForm);
-                    setIsModalOpen(false);
-                } else {
-                    // Stay open to show error logs
-                    setInitLogs(prev => [...prev, "❌ Initialization Failed. See logs above."]);
-                }
-            } else {
-                // Just add config
-                onAddRepo(repoForm);
-                setIsModalOpen(false);
-            }
+            // Add existing repo config
+            onAddRepo(repoForm);
+            setIsModalOpen(false);
         }
     }
   };
@@ -164,37 +133,21 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[2px] p-4 animate-in fade-in duration-200">
            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-gray-100 dark:border-slate-700 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 ring-1 ring-black/5 flex flex-col max-h-[90vh]">
              <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-gray-50/80 dark:bg-slate-900/50 shrink-0">
-               <h3 className="font-semibold text-slate-800 dark:text-white">{editingRepoId ? 'Edit Repository' : 'Add New Repository'}</h3>
-               <button onClick={() => setIsModalOpen(false)} disabled={initProcessing} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+               <h3 className="font-semibold text-slate-800 dark:text-white">{editingRepoId ? 'Edit Repository' : 'Add Repository'}</h3>
+               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
                  <X size={18} />
                </button>
              </div>
              
              <div className="p-6 space-y-4 overflow-y-auto flex-1">
                
-               {/* INIT TOGGLE (Only for New Repos) */}
+               {/* Pre-Requisite Info (Only if adding new) */}
                {!editingRepoId && (
-                   <div className={`border rounded-lg p-3 flex gap-3 transition-colors cursor-pointer ${
-                       repoForm.initialize 
-                       ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800' 
-                       : 'bg-white border-gray-200 hover:border-blue-200 dark:bg-slate-800 dark:border-slate-700 dark:hover:border-blue-700'
-                   }`} onClick={() => setRepoForm({...repoForm, initialize: !repoForm.initialize})}>
-                       <div className={`mt-0.5 w-5 h-5 rounded border flex items-center justify-center ${repoForm.initialize ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-300 dark:border-slate-600'}`}>
-                           {repoForm.initialize && <FilePlus className="w-3 h-3" />}
-                       </div>
-                       <div className="flex-1">
-                           <span className="font-bold text-sm text-slate-800 dark:text-slate-200 block">Initialize new repository</span>
-                           <span className="text-xs text-slate-500 dark:text-slate-400">Run <code>borg init</code> to create the repo structure on the server.</span>
-                       </div>
-                   </div>
-               )}
-
-               {/* Pre-Requisite Warning (Only if NOT initializing) */}
-               {!editingRepoId && !repoForm.initialize && (
-                   <div className="bg-slate-50 dark:bg-slate-700/30 border border-slate-200 dark:border-slate-600 rounded-lg p-3 flex gap-3">
-                       <AlertCircle className="w-5 h-5 text-slate-400 dark:text-slate-500 shrink-0 mt-0.5" />
-                       <div className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                           Assuming repository already exists. If not, check "Initialize" above.
+                   <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex gap-3">
+                       <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                       <div className="text-xs text-blue-800 dark:text-blue-300 leading-relaxed">
+                           <strong>Existing Repository Required</strong><br/>
+                           Please enter the URL of an already initialized Borg repository. This app connects to existing backups.
                        </div>
                    </div>
                )}
@@ -279,19 +232,12 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                  </div>
                </div>
 
-               {/* Logs for Initialization */}
-               {initLogs.length > 0 && (
-                   <div className="mt-4 bg-black rounded p-3 text-[10px] font-mono text-gray-300 max-h-32 overflow-y-auto">
-                       {initLogs.map((l, i) => <div key={i}>{l}</div>)}
-                   </div>
-               )}
-
              </div>
 
              <div className="px-6 py-4 bg-gray-50 dark:bg-slate-900/50 border-t border-gray-100 dark:border-slate-700 flex justify-end gap-3 shrink-0">
-               <Button variant="secondary" onClick={() => setIsModalOpen(false)} disabled={initProcessing} className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600">Cancel</Button>
-               <Button onClick={handleSave} disabled={!repoForm.name || !repoForm.url || initProcessing} loading={initProcessing}>
-                   {editingRepoId ? 'Save Changes' : (repoForm.initialize ? 'Initialize & Add' : 'Add Repository')}
+               <Button variant="secondary" onClick={() => setIsModalOpen(false)} className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600">Cancel</Button>
+               <Button onClick={handleSave} disabled={!repoForm.name || !repoForm.url}>
+                   {editingRepoId ? 'Save Changes' : 'Add Repository'}
                </Button>
              </div>
            </div>

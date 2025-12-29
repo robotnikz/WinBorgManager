@@ -137,19 +137,6 @@ export const borgService = {
   },
 
   /**
-   * Initialize a NEW repository
-   */
-  init: async (
-      repoUrl: string, 
-      encryption: 'repokey' | 'keyfile' | 'none', 
-      onLog: (text: string) => void,
-      overrides?: { passphrase?: string, disableHostCheck?: boolean }
-  ): Promise<boolean> => {
-      const args = ['init', '--encryption', encryption, repoUrl];
-      return await borgService.runCommand(args, onLog, overrides);
-  },
-
-  /**
    * Compact a repository (Free space)
    */
   compact: async (
