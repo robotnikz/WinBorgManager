@@ -19,9 +19,10 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) => {
 
   // Developer Config
   const devProfile = {
-      name: "robotnikz",
+      name: "Tobia",
       role: "Developer",
-      repo: "robotnikz/WinBorg"
+      repo: "robotnikz/WinBorg",
+      version: "v0.1.0"
   };
 
   const handleOpenRepo = (e: React.MouseEvent) => {
@@ -94,9 +95,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) => {
                 <div className="flex-1 min-w-0">
                     <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Developed by</div>
                     <div className="text-sm font-bold text-slate-800 dark:text-slate-200 truncate">{devProfile.name}</div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                        <Github className="w-3 h-3 text-slate-400" />
-                        <span className="text-[10px] text-slate-400 group-hover:text-blue-500 transition-colors">Source Code</span>
+                    <div className="flex items-center justify-between mt-0.5">
+                         <div className="flex items-center gap-1.5">
+                            <Github className="w-3 h-3 text-slate-400" />
+                            <span className="text-[10px] text-slate-400 group-hover:text-blue-500 transition-colors">Source</span>
+                         </div>
+                         <span className="text-[10px] text-slate-500 dark:text-slate-600 font-mono opacity-80">{devProfile.version}</span>
                     </div>
                 </div>
             </div>
