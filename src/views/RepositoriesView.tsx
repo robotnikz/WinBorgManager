@@ -1,17 +1,19 @@
 
 import React, { useState, useEffect } from 'react';
-import { Repository } from '../types';
+import { Repository, BackupJob } from '../types';
 import RepoCard from '../components/RepoCard';
 import MaintenanceModal from '../components/MaintenanceModal';
 import KeyExportModal from '../components/KeyExportModal';
 import DeleteRepoModal from '../components/DeleteRepoModal';
 import CreateBackupModal from '../components/CreateBackupModal';
+import JobsModal from '../components/JobsModal';
 import Button from '../components/Button';
 import { Plus, Search, X, Info, Link, FolderPlus, Loader2, Terminal } from 'lucide-react';
 import { borgService } from '../services/borgService';
 
 interface RepositoriesViewProps {
   repos: Repository[];
+  jobs: BackupJob[];
   onAddRepo: (repoData: { name: string; url: string; encryption: 'repokey' | 'keyfile' | 'none', passphrase?: string, trustHost?: boolean }) => void;
   onEditRepo: (id: string, repoData: { name: string; url: string; encryption: 'repokey' | 'keyfile' | 'none', passphrase?: string, trustHost?: boolean }) => void;
   onConnect: (repo: Repository) => void;
@@ -19,9 +21,16 @@ interface RepositoriesViewProps {
   onCheck: (repo: Repository) => void;
   onDelete: (repoId: string) => void;
   onBreakLock: (repo: Repository) => void;
+  // Job Handlers
+  onAddJob: (job: BackupJob) => void;
+  onDeleteJob: (jobId: string) => void;
+  onRunJob: (jobId: string) => void;
 }
 
-const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, onEditRepo, onConnect, onMount, onCheck, onDelete, onBreakLock }) => {
+const RepositoriesView: React.FC<RepositoriesViewProps> = ({ 
+    repos, jobs, onAddRepo, onEditRepo, onConnect, onMount, onCheck, onDelete, onBreakLock,
+    onAddJob, onDeleteJob, onRunJob
+}) => {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRepoId, setEditingRepoId] = useState<string | null>(null);
@@ -42,6 +51,9 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
   
   // Backup Modal
   const [backupRepo, setBackupRepo] = useState<Repository | null>(null);
+  
+  // Jobs Modal
+  const [jobsRepo, setJobsRepo] = useState<Repository | null>(null);
 
   // Terminal/Log Feedback for Maintenance/Delete
   const [localLogData, setLocalLogData] = useState<{title: string, logs: string[]} | null>(null);
@@ -207,7 +219,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
           />
       )}
       
-      {/* Create Backup Modal */}
+      {/* Create Backup Modal (One-off) */}
       {backupRepo && (
           <CreateBackupModal 
               repo={backupRepo}
@@ -215,6 +227,19 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
               onClose={() => setBackupRepo(null)}
               onLog={(title, logs) => setLocalLogData({ title, logs })}
               onSuccess={() => onConnect(backupRepo)}
+          />
+      )}
+      
+      {/* Jobs Modal */}
+      {jobsRepo && (
+          <JobsModal
+             repo={jobsRepo}
+             jobs={jobs}
+             isOpen={!!jobsRepo}
+             onClose={() => setJobsRepo(null)}
+             onAddJob={onAddJob}
+             onDeleteJob={onDeleteJob}
+             onRunJob={onRunJob}
           />
       )}
 
@@ -461,6 +486,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
             onMaintenance={handleOpenMaintenance}
             onExportKey={handleExportKey}
             onBackup={(r) => setBackupRepo(r)}
+            onManageJobs={(r) => setJobsRepo(r)}
           />
         ))}
         {filteredRepos.length === 0 && (

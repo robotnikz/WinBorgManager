@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Repository } from '../types';
-import { Server, Shield, Clock, HardDrive, Trash2, Loader2, Edit2, ShieldCheck, Unlock, Lock, Wrench, Key, UploadCloud } from 'lucide-react';
+import { Server, Shield, Clock, HardDrive, Trash2, Loader2, Edit2, ShieldCheck, Unlock, Lock, Wrench, Key, UploadCloud, Briefcase } from 'lucide-react';
 
 interface RepoCardProps {
   repo: Repository;
@@ -14,9 +14,10 @@ interface RepoCardProps {
   onMaintenance?: (repo: Repository) => void;
   onExportKey?: (repo: Repository) => void;
   onBackup?: (repo: Repository) => void;
+  onManageJobs?: (repo: Repository) => void;
 }
 
-const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete, onEdit, onCheck, onBreakLock, onMaintenance, onExportKey, onBackup }) => {
+const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete, onEdit, onCheck, onBreakLock, onMaintenance, onExportKey, onBackup, onManageJobs }) => {
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200/75 dark:border-slate-700 p-5 shadow-sm hover:shadow-md transition-all duration-200 group relative overflow-hidden flex flex-col h-full">
       
@@ -150,10 +151,19 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
                 >
                   Mount
                 </button>
+                {onManageJobs && (
+                    <button 
+                        onClick={() => onManageJobs(repo)}
+                        title="Manage Backup Jobs"
+                        className="px-3 py-2 text-xs font-semibold bg-purple-50 dark:bg-purple-900/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 border border-purple-200 dark:border-purple-800 rounded-lg text-purple-700 dark:text-purple-400 transition-colors shadow-sm"
+                    >
+                        <Briefcase className="w-4 h-4" />
+                    </button>
+                )}
                 {onBackup && (
                     <button 
                         onClick={() => onBackup(repo)}
-                        title="Create New Backup"
+                        title="One-off Backup (Snapshot)"
                         className="px-3 py-2 text-xs font-semibold bg-green-50 dark:bg-green-900/30 hover:bg-green-100 dark:hover:bg-green-900/50 border border-green-200 dark:border-green-800 rounded-lg text-green-700 dark:text-green-400 transition-colors shadow-sm"
                     >
                         <UploadCloud className="w-4 h-4" />

@@ -10,7 +10,7 @@ import ActivityView from './views/ActivityView';
 import ArchivesView from './views/ArchivesView';
 import TerminalModal from './components/TerminalModal';
 import FuseSetupModal from './components/FuseSetupModal';
-import { View, Repository, MountPoint, Archive, ActivityLogEntry } from './types';
+import { View, Repository, MountPoint, Archive, ActivityLogEntry, BackupJob } from './types';
 import { borgService } from './services/borgService';
 import { formatDate } from './utils/formatters';
 import { ToastContainer } from './components/ToastContainer';
@@ -76,6 +76,20 @@ const App: React.FC = () => {
     }
   });
 
+  // --- STATE: JOBS ---
+  const [jobs, setJobs] = useState<BackupJob[]>(() => {
+      const savedJobs = localStorage.getItem('winborg_jobs');
+      if (savedJobs) {
+          try {
+              return JSON.parse(savedJobs).map((j: BackupJob) => ({
+                  ...j,
+                  status: 'idle' // Reset status on load
+              }));
+          } catch(e) { return []; }
+      }
+      return [];
+  });
+
   // --- STATE: ARCHIVES ---
   const [archives, setArchives] = useState<Archive[]>(() => {
     const savedArchives = localStorage.getItem('winborg_archives');
@@ -104,6 +118,7 @@ const App: React.FC = () => {
 
   useEffect(() => { localStorage.setItem('winborg_archives', JSON.stringify(archives)); }, [archives]);
   useEffect(() => { localStorage.setItem('winborg_activity', JSON.stringify(activityLogs)); }, [activityLogs]);
+  useEffect(() => { localStorage.setItem('winborg_jobs', JSON.stringify(jobs)); }, [jobs]);
 
   // --- TASKBAR PROGRESS ---
   useEffect(() => {
@@ -491,15 +506,12 @@ const App: React.FC = () => {
   };
 
   const handleAddRepo = (repoData: any) => {
-    // If ID was generated in RepositoriesView (for secret saving), use it.
-    // Otherwise gen new.
     const newRepo: Repository = {
        id: repoData.id || Math.random().toString(36).substr(2, 9),
        name: repoData.name,
        url: repoData.url,
        encryption: repoData.encryption,
        trustHost: repoData.trustHost,
-       // IMPORTANT: Do NOT include passphrase here. It is saved in backend.
        lastBackup: 'Never',
        status: 'disconnected',
        size: 'Unknown',
@@ -508,7 +520,6 @@ const App: React.FC = () => {
        lastCheckTime: 'Never'
     };
     setRepos(prev => [...prev, newRepo]);
-    // Try connecting immediately
     handleConnect(newRepo);
   };
 
@@ -521,7 +532,67 @@ const App: React.FC = () => {
           // Clean up secret
           await borgService.deletePassphrase(repoId);
           setRepos(prev => prev.filter(r => r.id !== repoId));
+          // Clean up jobs for this repo
+          setJobs(prev => prev.filter(j => j.repoId !== repoId));
           toast.success("Repository removed.");
+      }
+  };
+
+  // --- JOB HANDLERS ---
+  const handleAddJob = (job: BackupJob) => {
+      setJobs(prev => [...prev, job]);
+      toast.success("Backup Job created.");
+  };
+
+  const handleDeleteJob = (jobId: string) => {
+      setJobs(prev => prev.filter(j => j.id !== jobId));
+      toast.info("Backup Job deleted.");
+  };
+
+  const handleRunJob = async (jobId: string) => {
+      const job = jobs.find(j => j.id === jobId);
+      if (!job) return;
+      const repo = repos.find(r => r.id === job.repoId);
+      if (!repo) {
+          toast.error("Repository not found for this job");
+          return;
+      }
+
+      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'running' } : j));
+      addActivity('Backup Job Started', `Job: ${job.name} (Repo: ${repo.name})`, 'info');
+
+      // Construct Archive Name: prefix-YYYY-MM-DD-HHMM
+      const now = new Date();
+      const dateStr = now.toISOString().slice(0, 10);
+      const timeStr = now.toTimeString().slice(0, 5).replace(':', '');
+      const archiveName = `${job.archivePrefix}-${dateStr}-${timeStr}`;
+
+      const logs: string[] = [];
+      const logCollector = (l: string) => logs.push(l);
+
+      try {
+          const success = await borgService.createArchive(
+              repo.url,
+              archiveName,
+              [job.sourcePath],
+              logCollector,
+              { repoId: repo.id, disableHostCheck: repo.trustHost }
+          );
+
+          if (success) {
+              setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'success', lastRun: new Date().toISOString() } : j));
+              addActivity('Backup Job Success', `Created archive: ${archiveName}`, 'success');
+              toast.success(`Job '${job.name}' finished successfully!`);
+              if (repo.status === 'connected') handleConnect(repo); // Refresh archive list
+          } else {
+              setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'error' } : j));
+              addActivity('Backup Job Failed', `Job: ${job.name} failed`, 'error');
+              toast.error(`Job '${job.name}' failed. Check activity log.`);
+          }
+      } catch (e: any) {
+          setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'error' } : j));
+          addActivity('Backup Job Error', e.message, 'error');
+          toast.error(`Job '${job.name}' error: ${e.message}`);
       }
   };
 
@@ -531,6 +602,7 @@ const App: React.FC = () => {
         return (
           <RepositoriesView 
             repos={repos} 
+            jobs={jobs}
             onAddRepo={handleAddRepo} 
             onEditRepo={handleEditRepo}
             onConnect={handleConnect}
@@ -538,6 +610,9 @@ const App: React.FC = () => {
             onCheck={handleCheckIntegrity}
             onBreakLock={handleBreakLock}
             onDelete={handleDeleteRepo}
+            onAddJob={handleAddJob}
+            onDeleteJob={handleDeleteJob}
+            onRunJob={handleRunJob}
           />
         );
       case View.MOUNTS:

@@ -34,6 +34,16 @@ export interface Repository {
   activeCommandId?: string;
 }
 
+export interface BackupJob {
+    id: string;
+    repoId: string;
+    name: string;          // Friendly name e.g. "Work Documents"
+    sourcePath: string;    // Local path
+    archivePrefix: string; // e.g. "work-docs" (Timestamp will be appended)
+    lastRun: string;       // ISO Date
+    status: 'idle' | 'running' | 'success' | 'error';
+}
+
 export interface Archive {
   id: string;
   name: string;
