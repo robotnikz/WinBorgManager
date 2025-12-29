@@ -1,9 +1,31 @@
 
 // This service communicates with the Electron Main process
 
-// Since we are in Electron with nodeIntegration: true, we can require electron
-const { ipcRenderer } = (window as any).require('electron');
 import { formatBytes, formatDuration } from '../utils/formatters';
+
+// Helper to safely get ipcRenderer without crashing in Browser mode
+const getIpcRenderer = () => {
+    try {
+        if ((window as any).require) {
+            const electron = (window as any).require('electron');
+            return electron.ipcRenderer;
+        }
+    } catch (e) {
+        console.warn("Electron require failed", e);
+    }
+    
+    // Fallback for Browser/Dev mode (Prevents White Screen crash)
+    console.warn("WinBorg: Running in browser/mock mode. Electron features disabled.");
+    return {
+        invoke: async () => ({ success: false, error: "Running in browser mode (Mock)" }),
+        send: () => {},
+        on: () => {},
+        removeListener: () => {}
+    };
+};
+
+// Initialize lazily
+const ipcRenderer = getIpcRenderer();
 
 const getBorgConfig = () => {
     const storedWsl = localStorage.getItem('winborg_use_wsl');
