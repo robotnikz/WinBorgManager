@@ -24,8 +24,14 @@ const App: React.FC = () => {
       return saved ? saved === 'dark' : true;
   });
 
+  // Effect: Apply class to HTML tag for Tailwind
   useEffect(() => {
       localStorage.setItem('winborg_theme', isDarkMode ? 'dark' : 'light');
+      if (isDarkMode) {
+          document.documentElement.classList.add('dark');
+      } else {
+          document.documentElement.classList.remove('dark');
+      }
   }, [isDarkMode]);
 
   const toggleTheme = () => setIsDarkMode(!isDarkMode);
@@ -521,7 +527,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className={`${isDarkMode ? 'dark' : ''} h-screen w-screen`}>
+    <div className="h-screen w-screen">
         <div className="flex flex-col h-full w-full overflow-hidden bg-[#f3f3f3] dark:bg-[#0f172a] transition-colors duration-300">
           <TitleBar />
           <div className="flex flex-1 overflow-hidden pt-9">
