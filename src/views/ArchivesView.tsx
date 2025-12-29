@@ -5,6 +5,7 @@ import Button from '../components/Button';
 import { Database, Clock, HardDrive, Search, Filter, Calendar, RefreshCw, Info, DownloadCloud, Loader2, ListChecks, FolderSearch, GitCompare } from 'lucide-react';
 import ArchiveBrowserModal from '../components/ArchiveBrowserModal';
 import TerminalModal from '../components/TerminalModal';
+import DiffViewerModal from '../components/DiffViewerModal';
 import ExtractionSuccessModal from '../components/ExtractionSuccessModal';
 import { borgService } from '../services/borgService';
 
@@ -93,15 +94,37 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
       setIsDiffOpen(true);
       setDiffLogs([]);
 
-      // Sort chronological roughly? (Assume names contain dates or ID order in list is chrono reversed)
       // Usually borg diff old new
-      // We pass them in order of selection, user needs to understand output
+      // Use the selection order or sort chronologically if we had date objects easily available
+      // Here we trust the user selects them, or we assume List is Chronological Descending
+      const sorted = archives.filter(a => selectedArchives.includes(a.name));
+      // Archives are normally sorted Newest -> Oldest in the UI list.
+      // Borg diff expects: borg diff OLD NEW
+      // So if sorted[0] is newer (top of list) and sorted[1] is older:
+      // we want diff(sorted[1], sorted[0])
+      
+      let oldArchive = selectedArchives[0];
+      let newArchive = selectedArchives[1];
+
+      // Simple heuristic: assuming the UI list is reverse chronological (standard for backups)
+      // If we find them in the list, the one with higher index is older.
+      const idx0 = archives.findIndex(a => a.name === selectedArchives[0]);
+      const idx1 = archives.findIndex(a => a.name === selectedArchives[1]);
+      
+      if (idx0 < idx1) {
+          // idx0 is smaller (appears earlier/higher), so it is NEWER.
+          newArchive = selectedArchives[0];
+          oldArchive = selectedArchives[1];
+      } else {
+          newArchive = selectedArchives[1];
+          oldArchive = selectedArchives[0];
+      }
       
       try {
           await borgService.diffArchives(
               activeRepo.url,
-              selectedArchives[1], // Newer (Usually higher in list if selecting top down)
-              selectedArchives[0], // Older
+              oldArchive, 
+              newArchive,
               (log) => setDiffLogs(prev => [...prev, log]),
               { repoId: activeRepo.id, disableHostCheck: activeRepo.trustHost }
           );
@@ -138,10 +161,11 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
           />
       )}
       
-      {/* Diff Output Modal */}
-      <TerminalModal 
+      {/* Visual Diff Viewer */}
+      <DiffViewerModal 
           isOpen={isDiffOpen}
-          title={`Comparing: ${selectedArchives[0]} vs ${selectedArchives[1]}`}
+          archiveOld={selectedArchives.length === 2 ? selectedArchives[0] : ''} // We pass these just for display headers
+          archiveNew={selectedArchives.length === 2 ? selectedArchives[1] : ''}
           logs={diffLogs}
           isProcessing={isDiffing}
           onClose={() => setIsDiffOpen(false)}
