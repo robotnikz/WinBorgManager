@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WinBorg Icon Generator</title>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: white;
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            gap: 20px;
+        }
+        .canvas-container {
+            background: #1e293b;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            text-align: center;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 20px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        p {
+            color: #94a3b8;
+            max-width: 400px;
+            line-height: 1.5;
+        }
+        canvas {
+            border-radius: 20px; /* Visual preview radius */
+        }
+    </style>
+</head>
+<body>
+
+    <div class="canvas-container">
+        <!-- SVG Source (Hidden) -->
+        <svg id="sourceSvg" xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" style="display:none;">
+            <defs>
+                <linearGradient id="bg_grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#1e293b" />
+                    <stop offset="100%" stop-color="#0f172a" />
+                </linearGradient>
+                <linearGradient id="cube_grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#3b82f6" />
+                  <stop offset="100%" stop-color="#1d4ed8" />
+                </linearGradient>
+                <linearGradient id="cube_top" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#60a5fa" />
+                  <stop offset="100%" stop-color="#3b82f6" />
+                </linearGradient>
+                <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feDropShadow dx="0" dy="10" stdDeviation="15" flood-color="#000" flood-opacity="0.4"/>
+                </filter>
+            </defs>
+            
+            <!-- App Icon Background Container -->
+            <rect x="0" y="0" width="512" height="512" rx="115" fill="url(#bg_grad)" />
+            <rect x="0" y="0" width="512" height="512" rx="115" fill="none" stroke="#334155" stroke-width="8" opacity="0.5" />
+            
+            <!-- Centered Logo Group -->
+            <g transform="translate(128, 128)" filter="url(#shadow)">
+                 <!-- Main Cube Shape -->
+                <path d="M128 232L48 186V94L128 48L208 94V186L128 232Z" fill="url(#cube_grad)" stroke="#1e40af" stroke-width="4" stroke-linejoin="round"/>
+                <!-- Top Face -->
+                <path d="M128 48L208 94L128 140L48 94L128 48Z" fill="url(#cube_top)" stroke="#60a5fa" stroke-width="2"/>
+                <!-- Inner Structure -->
+                <path d="M128 140V232" stroke="#1e3a8a" stroke-width="4" opacity="0.3"/>
+                <path d="M128 140L208 186" stroke="#1e3a8a" stroke-width="2" opacity="0.3"/>
+                <path d="M128 140L48 186" stroke="#1e3a8a" stroke-width="2" opacity="0.3"/>
+                <!-- Glowing Core / W -->
+                <path d="M96 110L128 128L160 110" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+                <path d="M128 128V160" stroke="white" stroke-width="8" stroke-linecap="round" opacity="0.7"/>
+                <circle cx="128" cy="128" r="6" fill="white" />
+            </g>
+        </svg>
+
+        <canvas id="iconCanvas" width="512" height="512"></canvas>
+        <br>
+        <button onclick="downloadIcon()">Download Icon (.png)</button>
+    </div>
+
+    <p>
+        <strong>Step 1:</strong> Click Download.<br>
+        <strong>Step 2:</strong> Save the file as <code>icon.png</code> inside the <code>public/</code> folder of your project.<br>
+        <strong>Step 3:</strong> Run <code>npm run electron</code> again to see it in the taskbar.
+    </p>
+
+    <script>
+        const canvas = document.getElementById('iconCanvas');
+        const ctx = canvas.getContext('2d');
+        const svg = document.getElementById('sourceSvg');
+
+        // Convert SVG to string
+        const xml = new XMLSerializer().serializeToString(svg);
+        const svg64 = btoa(xml);
+        const b64Start = 'data:image/svg+xml;base64,';
+        const image64 = b64Start + svg64;
+
+        const img = new Image();
+        img.onload = function() {
+            ctx.drawImage(img, 0, 0);
+        };
+        img.src = image64;
+
+        function downloadIcon() {
+            const link = document.createElement('a');
+            link.download = 'icon.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+    </script>
+</body>
+</html>
