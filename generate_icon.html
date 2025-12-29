@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WinBorg Icon Generator v3</title>
+    <title>WinBorg Icon Generator v4</title>
     <style>
         body {
             background-color: #0f172a;
@@ -24,15 +24,13 @@
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
             text-align: center;
         }
-        /* Preview Size */
         svg {
             display: block;
             margin: 0 auto;
             width: 256px;
             height: 256px;
             background: transparent;
-            /* Soft shadow for the preview presentation */
-            filter: drop-shadow(0 20px 25px rgba(0,0,0,0.3));
+            filter: drop-shadow(0 20px 25px rgba(0,0,0,0.5));
         }
         button {
             background: #3b82f6;
@@ -65,81 +63,90 @@
     <div class="container">
         <svg id="previewSvg" xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
             <defs>
-                <!-- Background: Deep Slate Blue -->
+                <!-- Background Gradient -->
                 <linearGradient id="bg_grad" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" stop-color="#1e293b" />
-                    <stop offset="100%" stop-color="#0f172a" />
+                    <stop offset="0%" stop-color="#0f172a" />
+                    <stop offset="100%" stop-color="#1e293b" />
                 </linearGradient>
 
-                <!-- Cube Gradients for 3D Effect -->
-                <!-- Left Face: Dark Blue -->
-                <linearGradient id="face_left" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#2563eb" />
+                <!-- Server Body Gradient (Metallic Dark Blue) -->
+                <linearGradient id="server_body" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="#1e293b" />
+                    <stop offset="20%" stop-color="#334155" />
+                    <stop offset="50%" stop-color="#475569" />
+                    <stop offset="80%" stop-color="#334155" />
+                    <stop offset="100%" stop-color="#1e293b" />
+                </linearGradient>
+                
+                <!-- Server Top Gradient -->
+                <linearGradient id="server_top" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#64748b" />
+                    <stop offset="100%" stop-color="#334155" />
+                </linearGradient>
+
+                <!-- Shield Gradient (Glowing Blue) -->
+                <linearGradient id="shield_grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#3b82f6" />
                     <stop offset="100%" stop-color="#1d4ed8" />
                 </linearGradient>
                 
-                <!-- Right Face: Darker Blue (Shadow side) -->
-                <linearGradient id="face_right" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" stop-color="#1e40af" />
-                    <stop offset="100%" stop-color="#1e3a8a" />
-                </linearGradient>
-
-                <!-- Top Face: Bright Cyan/Blue (Highlight) -->
-                <linearGradient id="face_top" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" stop-color="#60a5fa" />
-                    <stop offset="100%" stop-color="#3b82f6" />
-                </linearGradient>
+                <!-- Blue Glow -->
+                <filter id="blue_glow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="5" result="blur" />
+                    <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
             </defs>
             
-            <!-- 
-               Background Container 
-               Centered 512x512 with consistent border radius (Squircle)
-            -->
-            <rect x="24" y="24" width="464" height="464" rx="100" fill="url(#bg_grad)" stroke="#334155" stroke-width="4" />
+            <!-- Outer Shape (App Icon Container) -->
+            <rect x="24" y="24" width="464" height="464" rx="100" fill="url(#bg_grad)" stroke="#334155" stroke-width="6" />
             
-            <!-- 
-               CENTERING GROUP
-               The coordinate system is shifted so (0,0) is exactly the middle of the canvas (256, 256).
-               This ensures perfect centering.
-            -->
-            <g transform="translate(256, 256)">
+            <!-- SERVER TOWER -->
+            <g transform="translate(256, 240)">
+                <!-- Server Silhouette Shadow -->
+                <ellipse cx="0" cy="140" rx="110" ry="30" fill="black" opacity="0.5" />
+
+                <!-- Main Cylinder Body -->
+                <!-- Use a path to create the cylinder shape -->
+                <path d="M-90 -100 L-90 120 C-90 150, 90 150, 90 120 L90 -100" fill="url(#server_body)" stroke="#475569" stroke-width="2"/>
                 
-                <!-- 
-                   THE CUBE 
-                   Drawn relative to center. Scale factor: 1.2 for bold appearance.
-                   Math: Isometric angles (30 degrees).
-                -->
-                <g transform="scale(1.2) translate(0, 20)"> 
-                    <!-- Note: translated y=20 slightly down to visually center the mass because the top point is high -->
-
-                    <!-- Right Face -->
-                    <path d="M0 0 L130 -75 V75 L0 150 Z" fill="url(#face_right)" />
-                    
-                    <!-- Left Face -->
-                    <path d="M0 0 L-130 -75 V75 L0 150 Z" fill="url(#face_left)" />
-                    
-                    <!-- Top Face -->
-                    <path d="M0 0 L130 -75 L0 -150 L-130 -75 Z" fill="url(#face_top)" />
-
-                    <!-- 
-                       Highlight Edges (The "Clean" Look) 
-                       White semi-transparent lines to define the edges sharply.
-                    -->
-                    <!-- Center Vertical Line -->
-                    <path d="M0 0 V150" stroke="#1e3a8a" stroke-width="2" opacity="0.3" />
-                    
-                    <!-- Top Edges -->
-                    <path d="M0 0 L130 -75" stroke="white" stroke-width="2" opacity="0.3" />
-                    <path d="M0 0 L-130 -75" stroke="white" stroke-width="2" opacity="0.2" />
-                    
-                    <!-- Outer Rim Highlight (Top) -->
-                    <path d="M0 -150 L130 -75 M0 -150 L-130 -75" stroke="white" stroke-width="4" opacity="0.5" stroke-linecap="round" />
-                </g>
+                <!-- Cylinder Top Cap -->
+                <ellipse cx="0" cy="-100" rx="90" ry="35" fill="url(#server_top)" stroke="#64748b" stroke-width="2"/>
+                
+                <!-- Server Rack Lights / Slots -->
+                <!-- Slot 1 -->
+                <path d="M-60 -40 Q0 -10, 60 -40" stroke="#0f172a" stroke-width="8" fill="none" stroke-linecap="round"/>
+                <circle cx="-50" cy="-40" r="3" fill="#3b82f6" filter="url(#blue_glow)" />
+                <circle cx="50" cy="-40" r="3" fill="#3b82f6" filter="url(#blue_glow)" />
+                
+                <!-- Slot 2 -->
+                <path d="M-60 10 Q0 40, 60 10" stroke="#0f172a" stroke-width="8" fill="none" stroke-linecap="round"/>
+                <circle cx="-50" cy="10" r="3" fill="#3b82f6" filter="url(#blue_glow)" />
+                <circle cx="50" cy="10" r="3" fill="#3b82f6" filter="url(#blue_glow)" />
+                
+                 <!-- Slot 3 -->
+                <path d="M-60 60 Q0 90, 60 60" stroke="#0f172a" stroke-width="8" fill="none" stroke-linecap="round"/>
+                <circle cx="-50" cy="60" r="3" fill="#3b82f6" filter="url(#blue_glow)" />
+                <circle cx="50" cy="60" r="3" fill="#3b82f6" filter="url(#blue_glow)" />
             </g>
+            
+            <!-- SHIELD OVERLAY (Bottom Right) -->
+            <g transform="translate(320, 320) scale(1.1)">
+                <!-- Shield Shadow -->
+                 <path d="M0 10 C30 10, 55 35, 55 70 C55 110, 0 140, 0 140 C0 140, -55 110, -55 70 C-55 35, -30 10, 0 10 Z" 
+                      fill="black" opacity="0.3" transform="translate(0, 10)"/>
+
+                <!-- Shield Body -->
+                <path d="M0 0 C30 0, 55 25, 55 60 C55 100, 0 130, 0 130 C0 130, -55 100, -55 60 C-55 25, -30 0, 0 0 Z" 
+                      fill="url(#shield_grad)" stroke="#60a5fa" stroke-width="3" />
+                
+                <!-- Checkmark -->
+                <path d="M-20 50 L-5 65 L25 35" stroke="white" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round" filter="url(#blue_glow)" />
+            </g>
+
         </svg>
 
-        <button onclick="downloadPng()">Clean Icon herunterladen</button>
-        <p>Ein klares, zentriertes Design ohne Ablenkungen.</p>
+        <button onclick="downloadPng()">Server Icon herunterladen</button>
+        <p>Ein detailliertes "Protected Server" Design, angelehnt an deine Vorlage.</p>
     </div>
 
     <canvas id="renderCanvas" width="512" height="512" style="display:none;"></canvas>
