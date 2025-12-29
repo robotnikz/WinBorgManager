@@ -77,8 +77,35 @@ const parseBorgUrl = (url: string) => {
     return { isSsh: false, path: url };
 };
 
+// Helper: Convert Windows Path to WSL Path
+// C:\Users\Foo -> /mnt/c/Users/Foo
+const convertWindowsPathToWsl = (winPath: string): string => {
+    if (!winPath) return '';
+    // Check if already unix style
+    if (winPath.startsWith('/')) return winPath;
+
+    let wslPath = winPath.replace(/\\/g, '/');
+    const driveMatch = wslPath.match(/^([a-zA-Z]):/);
+    
+    if (driveMatch) {
+        const driveLetter = driveMatch[1].toLowerCase();
+        wslPath = wslPath.replace(/^([a-zA-Z]):/, `/mnt/${driveLetter}`);
+    }
+    return wslPath;
+};
+
 export const borgService = {
   
+  // --- NATIVE DIALOGS ---
+  selectDirectory: async (): Promise<string[]> => {
+      return await ipcRenderer.invoke('dialog:open-directory');
+  },
+
+  // --- NOTIFICATIONS ---
+  notify: (title: string, body: string) => {
+      ipcRenderer.send('notify', { title, body });
+  },
+
   // --- SECRETS MANAGEMENT ---
   savePassphrase: async (repoId: string, passphrase: string) => {
       return await ipcRenderer.invoke('save-secret', { repoId, passphrase });
@@ -127,6 +154,22 @@ export const borgService = {
     } finally {
       ipcRenderer.removeListener('terminal-log', logListener);
     }
+  },
+
+  createArchive: async (
+      repoUrl: string,
+      archiveName: string,
+      sourcePaths: string[],
+      onLog: (text: string) => void,
+      overrides?: { repoId?: string, disableHostCheck?: boolean }
+  ): Promise<boolean> => {
+      const config = getBorgConfig();
+      // Map Paths
+      const finalPaths = config.useWsl ? sourcePaths.map(convertWindowsPathToWsl) : sourcePaths;
+      
+      const args = ['create', '--verbose', '--stats', '--progress', '--compression', 'lz4', `${repoUrl}::${archiveName}`, ...finalPaths];
+      
+      return await borgService.runCommand(args, onLog, overrides);
   },
 
   compact: async (repoUrl: string, onLog: (text: string) => void, overrides?: { repoId?: string, disableHostCheck?: boolean }) => {

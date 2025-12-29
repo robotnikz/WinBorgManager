@@ -3,7 +3,7 @@
  * REAL BACKEND FOR WINBORG
  */
 
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, safeStorage, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, safeStorage, nativeImage, Notification, dialog } = require('electron');
 const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -145,6 +145,22 @@ ipcMain.on('window-maximize', () => {
 ipcMain.on('window-close', () => {
     // This triggers the 'close' event on BrowserWindow, which we intercept above
     if (mainWindow) mainWindow.close(); 
+});
+
+// --- DIALOGS & NOTIFICATIONS ---
+ipcMain.handle('dialog:open-directory', async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'multiSelections']
+  });
+  if (canceled) {
+    return [];
+  } else {
+    return filePaths;
+  }
+});
+
+ipcMain.on('notify', (event, { title, body }) => {
+    new Notification({ title, body, icon: path.join(__dirname, 'public/icon.png') }).show();
 });
 
 // --- TASKBAR PROGRESS ---

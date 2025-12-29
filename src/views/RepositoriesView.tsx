@@ -3,6 +3,7 @@ import { Repository } from '../types';
 import RepoCard from '../components/RepoCard';
 import MaintenanceModal from '../components/MaintenanceModal';
 import KeyExportModal from '../components/KeyExportModal';
+import CreateBackupModal from '../components/CreateBackupModal';
 import Button from '../components/Button';
 import { Plus, Search, X, ShieldAlert, Key, Terminal, AlertCircle, Info } from 'lucide-react';
 import { borgService } from '../services/borgService';
@@ -28,6 +29,8 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
   const [maintenanceRepo, setMaintenanceRepo] = useState<Repository | null>(null);
   const [isMaintenanceOpen, setIsMaintenanceOpen] = useState(false);
   const [exportKeyRepo, setExportKeyRepo] = useState<Repository | null>(null);
+  
+  const [createBackupRepo, setCreateBackupRepo] = useState<Repository | null>(null);
 
   // Terminal/Log Feedback for Maintenance
   const [localLogData, setLocalLogData] = useState<{title: string, logs: string[]} | null>(null);
@@ -60,13 +63,11 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
   };
 
   const handleOpenEdit = async (repo: Repository) => {
-      // We don't load the password back from secure storage for security reasons
-      // The user must re-enter it if they want to change it.
       setRepoForm({
           name: repo.name,
           url: repo.url,
           encryption: repo.encryption,
-          passphrase: '', // Leave empty to indicate "unchanged"
+          passphrase: '', 
           trustHost: repo.trustHost || false
       });
       setEditingRepoId(repo.id);
@@ -76,44 +77,19 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
   const handleSave = async () => {
     if (repoForm.name && repoForm.url) {
         if (editingRepoId) {
-            // Edit Mode
             onEditRepo(editingRepoId, {
                 ...repoForm,
-                passphrase: undefined // Don't save plain text in state object used for lists
+                passphrase: undefined 
             });
-            // If user entered a new passphrase, save it securely
             if (repoForm.passphrase) {
                 await borgService.savePassphrase(editingRepoId, repoForm.passphrase);
             }
             setIsModalOpen(false);
         } else {
-            // Add Mode
-            // Generate ID manually here to save secret before "adding" to parent state
             const newId = Math.random().toString(36).substr(2, 9);
-            
-            // Save Secret First
             if (repoForm.passphrase) {
                 await borgService.savePassphrase(newId, repoForm.passphrase);
             }
-
-            // Pass data up (without passphrase in plain text)
-            // We mock the onAddRepo slightly to accept the ID we generated
-            // In a real Redux app we'd dispatch an action, here we just need to pass the ID along
-            // But since onAddRepo generates ID in App.tsx, we need to change that or use a workaround.
-            // WORKAROUND: We will modify App.tsx to use the ID if provided, or we can't.
-            // Better: We can't easily inject the ID into App.tsx's handler without changing App.tsx signature.
-            // ALTERNATIVE: App.tsx's onAddRepo returns the new ID? No.
-            // FIX: We will rely on App.tsx to generate ID, then we call savePassphrase in App.tsx?
-            // NO, that passes plain text around.
-            // LET'S CHANGE APP.TSX to accept an ID in the object.
-            
-            // Actually, for now, let's assume onAddRepo handles it or we do a dirty trick:
-            // We pass the passphrase in the object to App.tsx, but App.tsx cleans it up?
-            // Security-wise, passing it in memory to App.tsx is okay-ish for a moment, 
-            // but we want to avoid `localStorage`. 
-            // App.tsx currently saves `repos` to `localStorage`.
-            // SO: App.tsx MUST NOT put `passphrase` into the `repos` state.
-            
             onAddRepo({ ...repoForm, id: newId } as any);
             setIsModalOpen(false);
         }
@@ -127,6 +103,10 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
   
   const handleExportKey = (repo: Repository) => {
       setExportKeyRepo(repo);
+  };
+
+  const handleCreateBackup = (repo: Repository) => {
+      setCreateBackupRepo(repo);
   };
 
   const filteredRepos = repos.filter(r => 
@@ -145,6 +125,17 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
               onClose={() => setIsMaintenanceOpen(false)}
               onRefreshRepo={onConnect}
               onLog={(title, logs) => setLocalLogData({ title, logs })}
+          />
+      )}
+      
+      {/* Create Backup Modal */}
+      {createBackupRepo && (
+          <CreateBackupModal
+             repo={createBackupRepo}
+             isOpen={!!createBackupRepo}
+             onClose={() => setCreateBackupRepo(null)}
+             onRefreshRepo={onConnect}
+             onLog={(title, logs) => setLocalLogData({ title, logs })}
           />
       )}
       
@@ -324,6 +315,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
             onEdit={handleOpenEdit}
             onMaintenance={handleOpenMaintenance}
             onExportKey={handleExportKey}
+            onCreateBackup={handleCreateBackup}
           />
         ))}
         {filteredRepos.length === 0 && (
