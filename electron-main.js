@@ -83,7 +83,7 @@ function createWindow() {
       webSecurity: false 
     },
     backgroundColor: '#f3f3f3',
-    icon: iconPath, // Can be null, Electron handles it
+    icon: iconPath, // Sets the Window Icon (Top left & Taskbar)
     titleBarStyle: 'hidden',
     titleBarOverlay: false
   });
@@ -102,24 +102,26 @@ function createWindow() {
               mainWindow.hide();
               return false;
           }
-          // If closeToTray is false, we let the event propagate, which destroys the window.
-          // However, we need to ensure app.quit is called to cleanup processes.
       }
   });
 }
 
 function createTray() {
     const iconPath = getIconPath();
-    if (!iconPath) return; // Skip tray if no icon
+    if (!iconPath) {
+        console.warn("No icon found for tray at:", iconPath);
+        return; 
+    }
     
     try {
-        const trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16 });
+        // Create native image and resize for Tray (usually 16x16 or 32x32 for Windows)
+        const trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
         
         tray = new Tray(trayIcon);
         tray.setToolTip('WinBorg Manager');
         
         const contextMenu = Menu.buildFromTemplate([
-            { label: 'Show WinBorg', click: () => mainWindow.show() },
+            { label: 'Open WinBorg', click: () => mainWindow.show() },
             { type: 'separator' },
             { label: 'Check for Updates', click: () => checkForUpdates(true) },
             { type: 'separator' },
@@ -130,25 +132,29 @@ function createTray() {
         ]);
         
         tray.setContextMenu(contextMenu);
-        tray.on('double-click', () => mainWindow.show());
+        
+        // Restore on double click
+        tray.on('double-click', () => {
+            if (mainWindow) {
+                mainWindow.show();
+                mainWindow.focus();
+            }
+        });
     } catch (e) {
         console.warn("Failed to create tray icon:", e);
     }
 }
 
 // --- UPDATE CHECKER LOGIC ---
-// Simple fetch-based checker to avoid 'electron-updater' dependency issues in this setup
 async function checkForUpdates(manual = false) {
     try {
         const pkg = require('./package.json');
         const currentVersion = pkg.version;
         
-        // Fetch latest release from GitHub API
         const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
             headers: { 'User-Agent': 'WinBorg-Updater' }
         });
         
-        // Handle 404 specifically (No releases found)
         if (response.status === 404) {
             if (manual) {
                 dialog.showMessageBoxSync(mainWindow, {
@@ -164,9 +170,8 @@ async function checkForUpdates(manual = false) {
         if (!response.ok) throw new Error(`GitHub API Error: ${response.status} ${response.statusText}`);
         
         const data = await response.json();
-        const latestVersion = data.tag_name.replace(/^v/, ''); // Remove 'v' prefix if present
+        const latestVersion = data.tag_name.replace(/^v/, ''); 
         
-        // Very basic semver check
         if (latestVersion !== currentVersion) {
             const choice = dialog.showMessageBoxSync(mainWindow, {
                 type: 'info',
@@ -204,7 +209,6 @@ app.whenReady().then(() => {
     createWindow();
     createTray();
     
-    // Check for updates on startup
     setTimeout(() => checkForUpdates(false), 3000);
 });
 
@@ -213,9 +217,6 @@ app.on('before-quit', () => {
 });
 
 app.on('window-all-closed', () => {
-  // If user configured "Close to Tray" (false), and they clicked X, the window closes.
-  // In Electron, window-all-closed usually quits unless macOS.
-  // We respect isQuitting flag or closeToTray.
   if (process.platform !== 'darwin' && !closeToTray) {
       cleanupAndQuit();
   }
@@ -233,18 +234,15 @@ function cleanupAndQuit() {
 
 // --- IPC HANDLERS ---
 
-// Settings: Sync "Close to Tray" preference
 ipcMain.on('set-close-behavior', (event, shouldCloseToTray) => {
     closeToTray = shouldCloseToTray;
 });
 
-// Manual Update Check from UI
 ipcMain.handle('check-for-updates', async () => {
     await checkForUpdates(true);
     return true;
 });
 
-// --- WINDOW CONTROLS HANDLERS ---
 ipcMain.on('window-minimize', () => { if (mainWindow) mainWindow.minimize(); });
 ipcMain.on('window-maximize', () => {
     if (mainWindow) {
@@ -252,13 +250,10 @@ ipcMain.on('window-maximize', () => {
     }
 });
 ipcMain.on('window-close', () => {
-    // This triggers the 'close' event on BrowserWindow
     if (mainWindow) mainWindow.close(); 
 });
 
-// --- TASKBAR PROGRESS ---
 ipcMain.on('set-progress', (event, progress) => {
-    // progress should be 0 to 1, or -1 to remove
     if (mainWindow) {
         mainWindow.setProgressBar(progress);
     }
@@ -345,19 +340,13 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
 
     if (useWsl) {
         bin = 'wsl'; 
-        // If CWD is provided (for extraction), we need to handle it.
-        // WSL spawn doesn't accept a Windows CWD directly if we want to run the command inside that folder in Linux context.
-        // Strategy: Use "cd /path && borg ..." wrapped in shell
         if (cwd) {
-            // Convert C:\Path to /mnt/c/Path for WSL
             let wslCwd = cwd;
             if (/^[a-zA-Z]:/.test(cwd)) {
                 const drive = cwd.charAt(0).toLowerCase();
                 const pathPart = cwd.slice(2).replace(/\\/g, '/');
                 wslCwd = `/mnt/${drive}${pathPart}`;
             }
-            
-            // For extraction, we must wrap in shell to handle 'cd'
             const cmdString = `cd "${wslCwd}" && ${targetBinary} ${args.map(a => `"${a}"`).join(' ')}`;
             finalArgs = wslUser ? ['-u', wslUser, '--exec', 'sh', '-c', cmdString] : ['--exec', 'sh', '-c', cmdString];
         } else {
@@ -371,14 +360,11 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
         bin = (targetBinary === 'borg') ? (executablePath || 'borg') : targetBinary;
         finalArgs = args;
     }
-
-    // console.log(`[Borg] Executing: ${bin} ${finalArgs.join(' ')}`); // Disabled for privacy in prod logs
     
     try {
         const child = spawn(bin, finalArgs, {
           env: getEnv(vars),
           shell: !useWsl,
-          // Only apply native CWD if NOT using WSL (WSL handled via shell wrap above)
           cwd: (!useWsl && cwd) ? cwd : undefined
         });
 
@@ -426,7 +412,6 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
   return new Promise((resolve) => {
     let bin, finalArgs;
     
-    // INJECT SECRET
     const vars = { ...envVars };
     if (repoId) {
         const secret = getDecryptedPassword(repoId);
