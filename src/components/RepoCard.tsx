@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { Repository } from '../types';
-import { Server, Shield, Clock, HardDrive, Trash2, Loader2, Edit2, ShieldCheck, Unlock, Lock, Wrench, Key } from 'lucide-react';
+import { Server, Shield, Clock, HardDrive, Trash2, Loader2, Edit2, ShieldCheck, Unlock, Lock, Wrench, Key, UploadCloud } from 'lucide-react';
 
 interface RepoCardProps {
   repo: Repository;
@@ -12,9 +13,10 @@ interface RepoCardProps {
   onBreakLock?: (repo: Repository) => void;
   onMaintenance?: (repo: Repository) => void;
   onExportKey?: (repo: Repository) => void;
+  onBackup?: (repo: Repository) => void;
 }
 
-const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete, onEdit, onCheck, onBreakLock, onMaintenance, onExportKey }) => {
+const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete, onEdit, onCheck, onBreakLock, onMaintenance, onExportKey, onBackup }) => {
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200/75 dark:border-slate-700 p-5 shadow-sm hover:shadow-md transition-all duration-200 group relative overflow-hidden flex flex-col h-full">
       
@@ -140,12 +142,24 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
             </button>
             
             {repo.status === 'connected' && (
+                <>
                 <button 
                   onClick={() => onMount?.(repo)}
+                  title="Mount existing archives"
                   className="flex-1 px-3 py-2 text-xs font-semibold bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800 rounded-lg text-blue-700 dark:text-blue-400 transition-colors shadow-sm"
                 >
                   Mount
                 </button>
+                {onBackup && (
+                    <button 
+                        onClick={() => onBackup(repo)}
+                        title="Create New Backup"
+                        className="px-3 py-2 text-xs font-semibold bg-green-50 dark:bg-green-900/30 hover:bg-green-100 dark:hover:bg-green-900/50 border border-green-200 dark:border-green-800 rounded-lg text-green-700 dark:text-green-400 transition-colors shadow-sm"
+                    >
+                        <UploadCloud className="w-4 h-4" />
+                    </button>
+                )}
+                </>
             )}
          </div>
          

@@ -1,9 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import { Repository } from '../types';
 import RepoCard from '../components/RepoCard';
 import MaintenanceModal from '../components/MaintenanceModal';
 import KeyExportModal from '../components/KeyExportModal';
 import DeleteRepoModal from '../components/DeleteRepoModal';
+import CreateBackupModal from '../components/CreateBackupModal';
 import Button from '../components/Button';
 import { Plus, Search, X, Info, Link, FolderPlus, Loader2, Terminal } from 'lucide-react';
 import { borgService } from '../services/borgService';
@@ -37,6 +39,9 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
   const [isMaintenanceOpen, setIsMaintenanceOpen] = useState(false);
   const [exportKeyRepo, setExportKeyRepo] = useState<Repository | null>(null);
   const [deleteRepo, setDeleteRepo] = useState<Repository | null>(null);
+  
+  // Backup Modal
+  const [backupRepo, setBackupRepo] = useState<Repository | null>(null);
 
   // Terminal/Log Feedback for Maintenance/Delete
   const [localLogData, setLocalLogData] = useState<{title: string, logs: string[]} | null>(null);
@@ -201,10 +206,21 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
             onLog={(title, logs) => setLocalLogData({ title, logs })}
           />
       )}
+      
+      {/* Create Backup Modal */}
+      {backupRepo && (
+          <CreateBackupModal 
+              repo={backupRepo}
+              isOpen={!!backupRepo}
+              onClose={() => setBackupRepo(null)}
+              onLog={(title, logs) => setLocalLogData({ title, logs })}
+              onSuccess={() => onConnect(backupRepo)}
+          />
+      )}
 
       {/* Local Log Modal (Simple) */}
       {localLogData && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
               <div className="bg-[#1e1e1e] w-full max-w-2xl rounded-lg shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
                   <div className="px-4 py-2 bg-[#2d2d2d] border-b border-black/20 flex justify-between items-center text-gray-300">
                       <span className="font-mono text-sm">{localLogData.title}</span>
@@ -444,6 +460,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
             onEdit={handleOpenEdit}
             onMaintenance={handleOpenMaintenance}
             onExportKey={handleExportKey}
+            onBackup={(r) => setBackupRepo(r)}
           />
         ))}
         {filteredRepos.length === 0 && (

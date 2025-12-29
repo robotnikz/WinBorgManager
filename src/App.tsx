@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import TitleBar from './components/TitleBar';
@@ -12,6 +13,8 @@ import FuseSetupModal from './components/FuseSetupModal';
 import { View, Repository, MountPoint, Archive, ActivityLogEntry } from './types';
 import { borgService } from './services/borgService';
 import { formatDate } from './utils/formatters';
+import { ToastContainer } from './components/ToastContainer';
+import { toast } from './utils/eventBus';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
@@ -159,6 +162,7 @@ const App: React.FC = () => {
                 const mount = prev.find(m => m.id === mountId);
                 if (mount) {
                      addActivity('Mount Crashed', `Mount point ${mount.localPath} exited unexpectedly (Code ${code})`, 'error');
+                     toast.error(`Mount exited unexpectedly: ${mount.archiveName}`);
                 }
                 return prev.filter(m => m.id !== mountId);
             });
@@ -234,6 +238,8 @@ const App: React.FC = () => {
 
     if (result.success) {
         addActivity('Mount Successful', `Archive ${archiveName} mounted at ${path}`, 'success');
+        toast.success(`Mounted ${archiveName}`);
+        
         setTerminalLogs(prev => [...prev, "Mount process started successfully."]);
         const newMount: MountPoint = {
           id: result.mountId || Date.now().toString(),
@@ -252,6 +258,7 @@ const App: React.FC = () => {
         
     } else {
         addActivity('Mount Failed', `Failed to mount ${archiveName}: ${result.error || 'Unknown error'}`, 'error');
+        toast.error(`Mount failed. See activity logs.`);
         setIsTerminalOpen(true);
 
         if (result.error === 'FUSE_MISSING') {
@@ -273,6 +280,8 @@ const App: React.FC = () => {
     await borgService.unmount(mount.id, mount.localPath);
     
     addActivity('Unmount', `Unmounted ${mount.localPath}`, 'success');
+    toast.info(`Unmounted ${mount.localPath}`);
+    
     setMounts(prev => prev.filter(m => m.id !== id));
     setIsProcessing(false);
     
@@ -325,6 +334,7 @@ const App: React.FC = () => {
 
                 setArchives(newArchives);
                 addActivity('Connection Successful', `Connected to ${repo.name}`, 'success');
+                toast.success(`Connected to ${repo.name}`);
 
                 if (newArchives.length > 0) {
                     setTimeout(() => handleFetchArchiveStats(repo, newArchives[0].name), 500);
@@ -362,6 +372,7 @@ const App: React.FC = () => {
 
             } catch (e) {
                 addActivity('Connection Failed', `Failed to parse response from ${repo.name}`, 'error');
+                toast.error(`Failed to connect to ${repo.name}`);
                 setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, status: 'error' } : r));
             }
         },
@@ -385,6 +396,7 @@ const App: React.FC = () => {
       } : r));
       
       addActivity('Integrity Check Started', `Started check on ${repo.name}`, 'info');
+      toast.info(`Integrity check started for ${repo.name}`);
 
       const progressCallback = (log: string) => {
          const matches = [...log.matchAll(/(\d+\.\d+|\d+)%/g)];
@@ -406,8 +418,14 @@ const App: React.FC = () => {
 
       setRepos(prev => {
           if (prev.find(r => r.id === repo.id)?.checkStatus === 'aborted') return prev;
-          if (success) addActivity('Integrity Check Passed', `Repository ${repo.name} verified.`, 'success');
-          else addActivity('Integrity Check Failed', `Check failed for ${repo.name}.`, 'error');
+          
+          if (success) {
+              addActivity('Integrity Check Passed', `Repository ${repo.name} verified.`, 'success');
+              toast.success(`Integrity check passed for ${repo.name}`);
+          } else {
+              addActivity('Integrity Check Failed', `Check failed for ${repo.name}.`, 'error');
+              toast.error(`Integrity check failed for ${repo.name}`);
+          }
 
           return prev.map(r => r.id === repo.id ? { 
             ...r, 
@@ -452,8 +470,12 @@ const App: React.FC = () => {
       setIsProcessing(false);
       await checkRepoLock(repo);
 
-      if(deleteSuccess) addActivity('Unlock Successful', `Lock files removed for ${repo.name}`, 'success');
-      else setIsTerminalOpen(true);
+      if(deleteSuccess) {
+          addActivity('Unlock Successful', `Lock files removed for ${repo.name}`, 'success');
+          toast.success("Repository unlocked.");
+      } else {
+          setIsTerminalOpen(true);
+      }
   };
 
   const handleQuickMount = (repo: Repository) => {
@@ -499,6 +521,7 @@ const App: React.FC = () => {
           // Clean up secret
           await borgService.deletePassphrase(repoId);
           setRepos(prev => prev.filter(r => r.id !== repoId));
+          toast.success("Repository removed.");
       }
   };
 
@@ -564,7 +587,8 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="h-screen w-screen">
+    <div className="h-screen w-screen relative">
+        <ToastContainer />
         <div className="flex flex-col h-full w-full overflow-hidden bg-[#f3f3f3] dark:bg-[#0f172a] transition-colors duration-300">
           <TitleBar />
           <div className="flex flex-1 overflow-hidden pt-9">
