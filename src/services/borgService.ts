@@ -137,10 +137,25 @@ export const borgService = {
   runCommand: async (
     args: string[], 
     onLog: (text: string) => void,
-    overrides?: { repoId?: string, disableHostCheck?: boolean, commandId?: string, forceBinary?: string, cwd?: string }
+    overrides?: { repoId?: string, disableHostCheck?: boolean, commandId?: string, forceBinary?: string, cwd?: string, env?: Record<string, string> }
   ): Promise<boolean> => {
     const commandId = overrides?.commandId || Math.random().toString(36).substring(7);
     const config = getBorgConfig();
+
+    // Prepare Environment Variables
+    let baseEnv = getEnvVars(config, overrides);
+    const customEnv = overrides?.env || {};
+    const finalEnv = { ...baseEnv, ...customEnv };
+
+    // If using WSL, we must add custom keys to WSLENV so they are passed to the Linux instance
+    if (config.useWsl && Object.keys(customEnv).length > 0) {
+        const extraKeys = Object.keys(customEnv).join(':');
+        if (finalEnv.WSLENV) {
+            finalEnv.WSLENV = `${finalEnv.WSLENV}:${extraKeys}`;
+        } else {
+            finalEnv.WSLENV = extraKeys;
+        }
+    }
 
     const logListener = (_: any, msg: { id: string, text: string }) => {
       if (msg.id === commandId) onLog(msg.text);
@@ -154,7 +169,7 @@ export const borgService = {
           commandId, 
           useWsl: config.useWsl,
           executablePath: config.path,
-          envVars: getEnvVars(config, overrides),
+          envVars: finalEnv,
           forceBinary: overrides?.forceBinary,
           repoId: overrides?.repoId, // SECURE INJECTION TRIGGER
           cwd: overrides?.cwd
@@ -222,13 +237,14 @@ export const borgService = {
   /**
    * Deletes the entire repository structure.
    * Equivalent to: borg delete repo
+   * REQUIRES SPECIAL ENV VAR to avoid interactive prompt
    */
   destroyRepo: async (repoUrl: string, onLog: (text: string) => void, overrides?: { repoId?: string, disableHostCheck?: boolean }) => {
       const args = ['delete', repoUrl];
-      const deleteEnv = { 
-          BORG_DELETE_I_KNOW_WHAT_I_AM_DOING: 'yes' 
-      };
-      return await borgService.runCommand(args, onLog, overrides);
+      return await borgService.runCommand(args, onLog, { 
+          ...overrides, 
+          env: { 'BORG_DELETE_I_KNOW_WHAT_I_AM_DOING': 'yes' } 
+      });
   },
 
   compact: async (repoUrl: string, onLog: (text: string) => void, overrides?: { repoId?: string, disableHostCheck?: boolean }) => {
