@@ -4,7 +4,7 @@ import RepoCard from '../components/RepoCard';
 import MaintenanceModal from '../components/MaintenanceModal';
 import KeyExportModal from '../components/KeyExportModal';
 import Button from '../components/Button';
-import { Plus, Search, X, ShieldAlert, Key, Terminal, AlertCircle, Info } from 'lucide-react';
+import { Plus, Search, X, ShieldAlert, Key, Terminal, AlertCircle, Info, Link, Lock, FolderPlus, Loader2 } from 'lucide-react';
 import { borgService } from '../services/borgService';
 
 interface RepositoriesViewProps {
@@ -24,6 +24,13 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
   const [editingRepoId, setEditingRepoId] = useState<string | null>(null);
   const [useWsl, setUseWsl] = useState(true);
   
+  // ADD MODAL STATE
+  const [addMode, setAddMode] = useState<'connect' | 'init'>('connect');
+  const [confirmPassphrase, setConfirmPassphrase] = useState('');
+  const [isInitializing, setIsInitializing] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
+  const [initLog, setInitLog] = useState<string>('');
+
   // Modals
   const [maintenanceRepo, setMaintenanceRepo] = useState<Repository | null>(null);
   const [isMaintenanceOpen, setIsMaintenanceOpen] = useState(false);
@@ -55,67 +62,92 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
 
   const handleOpenAdd = () => {
       setRepoForm({ name: '', url: '', encryption: 'repokey', passphrase: '', trustHost: false });
+      setConfirmPassphrase('');
       setEditingRepoId(null);
+      setAddMode('connect');
+      setIsInitializing(false);
+      setInitError(null);
       setIsModalOpen(true);
   };
 
   const handleOpenEdit = async (repo: Repository) => {
-      // We don't load the password back from secure storage for security reasons
-      // The user must re-enter it if they want to change it.
       setRepoForm({
           name: repo.name,
           url: repo.url,
           encryption: repo.encryption,
-          passphrase: '', // Leave empty to indicate "unchanged"
+          passphrase: '', 
           trustHost: repo.trustHost || false
       });
+      setConfirmPassphrase('');
       setEditingRepoId(repo.id);
+      setAddMode('connect'); // Edit implies connection settings
       setIsModalOpen(true);
   };
 
   const handleSave = async () => {
-    if (repoForm.name && repoForm.url) {
-        if (editingRepoId) {
-            // Edit Mode
-            onEditRepo(editingRepoId, {
-                ...repoForm,
-                passphrase: undefined // Don't save plain text in state object used for lists
-            });
-            // If user entered a new passphrase, save it securely
-            if (repoForm.passphrase) {
-                await borgService.savePassphrase(editingRepoId, repoForm.passphrase);
-            }
-            setIsModalOpen(false);
-        } else {
-            // Add Mode
-            // Generate ID manually here to save secret before "adding" to parent state
-            const newId = Math.random().toString(36).substr(2, 9);
-            
-            // Save Secret First
-            if (repoForm.passphrase) {
-                await borgService.savePassphrase(newId, repoForm.passphrase);
-            }
+    // Basic Validation
+    if (!repoForm.name || !repoForm.url) return;
+    
+    // Check passphrase match if initializing
+    if (addMode === 'init' && repoForm.encryption !== 'none') {
+        if (repoForm.passphrase !== confirmPassphrase) {
+            setInitError("Passphrases do not match.");
+            return;
+        }
+        if (!repoForm.passphrase) {
+            setInitError("Passphrase is required for encryption.");
+            return;
+        }
+    }
 
-            // Pass data up (without passphrase in plain text)
-            // We mock the onAddRepo slightly to accept the ID we generated
-            // In a real Redux app we'd dispatch an action, here we just need to pass the ID along
-            // But since onAddRepo generates ID in App.tsx, we need to change that or use a workaround.
-            // WORKAROUND: We will modify App.tsx to use the ID if provided, or we can't.
-            // Better: We can't easily inject the ID into App.tsx's handler without changing App.tsx signature.
-            // ALTERNATIVE: App.tsx's onAddRepo returns the new ID? No.
-            // FIX: We will rely on App.tsx to generate ID, then we call savePassphrase in App.tsx?
-            // NO, that passes plain text around.
-            // LET'S CHANGE APP.TSX to accept an ID in the object.
-            
-            // Actually, for now, let's assume onAddRepo handles it or we do a dirty trick:
-            // We pass the passphrase in the object to App.tsx, but App.tsx cleans it up?
-            // Security-wise, passing it in memory to App.tsx is okay-ish for a moment, 
-            // but we want to avoid `localStorage`. 
-            // App.tsx currently saves `repos` to `localStorage`.
-            // SO: App.tsx MUST NOT put `passphrase` into the `repos` state.
-            
+    if (editingRepoId) {
+        // --- EDIT MODE ---
+        onEditRepo(editingRepoId, {
+            ...repoForm,
+            passphrase: undefined 
+        });
+        if (repoForm.passphrase) {
+            await borgService.savePassphrase(editingRepoId, repoForm.passphrase);
+        }
+        setIsModalOpen(false);
+
+    } else {
+        // --- ADD NEW (CONNECT or INIT) ---
+        const newId = Math.random().toString(36).substr(2, 9);
+        
+        // 1. Save Passphrase First
+        if (repoForm.passphrase) {
+            await borgService.savePassphrase(newId, repoForm.passphrase);
+        }
+
+        if (addMode === 'connect') {
+            // Just add to list
             onAddRepo({ ...repoForm, id: newId } as any);
             setIsModalOpen(false);
+        } else {
+            // --- INITIALIZE REPO ---
+            setIsInitializing(true);
+            setInitError(null);
+            setInitLog("Starting initialization...\n");
+
+            const success = await borgService.initRepo(
+                repoForm.url,
+                repoForm.encryption,
+                (log) => setInitLog(prev => prev + log),
+                { repoId: newId, disableHostCheck: repoForm.trustHost }
+            );
+
+            setIsInitializing(false);
+
+            if (success) {
+                // Add to list if success
+                onAddRepo({ ...repoForm, id: newId } as any);
+                setIsModalOpen(false);
+            } else {
+                // Clean up secret if failed
+                await borgService.deletePassphrase(newId);
+                setInitError("Initialization failed. Check logs below.");
+            }
         }
     }
   };
@@ -180,22 +212,56 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
       {/* Add/Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[2px] p-4 animate-in fade-in duration-200">
-           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-gray-100 dark:border-slate-700 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 ring-1 ring-black/5 flex flex-col max-h-[90vh]">
+           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-gray-100 dark:border-slate-700 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 ring-1 ring-black/5 flex flex-col max-h-[90vh]">
              <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-gray-50/80 dark:bg-slate-900/50 shrink-0">
                <h3 className="font-semibold text-slate-800 dark:text-white">{editingRepoId ? 'Edit Repository' : 'Add Repository'}</h3>
-               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+               <button onClick={() => setIsModalOpen(false)} disabled={isInitializing} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors disabled:opacity-50">
                  <X size={18} />
                </button>
              </div>
+
+             {/* TABS */}
+             {!editingRepoId && (
+                 <div className="flex border-b border-gray-200 dark:border-slate-700">
+                    <button 
+                        onClick={() => setAddMode('connect')}
+                        disabled={isInitializing}
+                        className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${addMode === 'connect' 
+                            ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-400' 
+                            : 'text-slate-500 hover:bg-gray-50 dark:text-slate-400 dark:hover:bg-slate-700/50'}`}
+                    >
+                        <Link className="w-4 h-4" /> Connect Existing
+                    </button>
+                    <button 
+                        onClick={() => setAddMode('init')}
+                        disabled={isInitializing}
+                        className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${addMode === 'init' 
+                            ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20 dark:text-indigo-400 dark:border-indigo-400' 
+                            : 'text-slate-500 hover:bg-gray-50 dark:text-slate-400 dark:hover:bg-slate-700/50'}`}
+                    >
+                        <FolderPlus className="w-4 h-4" /> Initialize New
+                    </button>
+                 </div>
+             )}
              
              <div className="p-6 space-y-4 overflow-y-auto flex-1">
                
-               {!editingRepoId && (
+               {!editingRepoId && addMode === 'connect' && (
                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex gap-3">
                        <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                        <div className="text-xs text-blue-800 dark:text-blue-300 leading-relaxed">
-                           <strong>Existing Repository Required</strong><br/>
-                           Please enter the URL of an already initialized Borg repository.
+                           <strong>Connect Existing</strong><br/>
+                           Enter the URL of an already initialized Borg repository.
+                       </div>
+                   </div>
+               )}
+
+               {!editingRepoId && addMode === 'init' && (
+                   <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-3 flex gap-3">
+                       <FolderPlus className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
+                       <div className="text-xs text-indigo-800 dark:text-indigo-300 leading-relaxed">
+                           <strong>Initialize New</strong><br/>
+                           This will create a new, empty Borg repository at the specified location using <code>borg init</code>.
                        </div>
                    </div>
                )}
@@ -210,6 +276,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                  <input 
                    type="text" 
                    autoFocus
+                   disabled={isInitializing}
                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm text-slate-900 dark:text-white transition-all shadow-sm"
                    placeholder="My Remote Backup"
                    value={repoForm.name}
@@ -220,6 +287,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">SSH Connection URL</label>
                  <input 
                    type="text" 
+                   disabled={isInitializing}
                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm text-slate-900 dark:text-white font-mono transition-all shadow-sm"
                    placeholder="ssh://user@example.com:22/path/to/repo"
                    value={repoForm.url}
@@ -232,9 +300,10 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                      <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Encryption</label>
                      <div className="relative">
                         <select 
-                          className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm text-slate-900 dark:text-white appearance-none shadow-sm"
+                          className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm text-slate-900 dark:text-white appearance-none shadow-sm disabled:opacity-50"
                           value={repoForm.encryption}
                           onChange={e => setRepoForm({...repoForm, encryption: e.target.value as any})}
+                          disabled={isInitializing}
                         >
                           <option value="repokey">Repokey</option>
                           <option value="keyfile">Keyfile</option>
@@ -248,6 +317,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                      <div className="relative">
                         <input 
                           type="password" 
+                          disabled={isInitializing}
                           className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm text-slate-900 dark:text-white shadow-sm"
                           placeholder={editingRepoId ? "Change (Optional)" : "Required"}
                           value={repoForm.passphrase}
@@ -256,6 +326,26 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                      </div>
                    </div>
                </div>
+               
+               {/* Confirm Password Field for Init Mode */}
+               {addMode === 'init' && repoForm.encryption !== 'none' && (
+                   <div>
+                     <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Confirm Passphrase</label>
+                     <input 
+                       type="password" 
+                       disabled={isInitializing}
+                       className={`w-full px-3 py-2 bg-white dark:bg-slate-900 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm text-slate-900 dark:text-white shadow-sm ${
+                           confirmPassphrase && confirmPassphrase !== repoForm.passphrase ? 'border-red-500 focus:border-red-500' : 'border-gray-300 dark:border-slate-600 focus:border-blue-500'
+                       }`}
+                       placeholder="Re-enter to confirm"
+                       value={confirmPassphrase}
+                       onChange={e => setConfirmPassphrase(e.target.value)}
+                     />
+                     {confirmPassphrase && confirmPassphrase !== repoForm.passphrase && (
+                         <p className="text-red-500 text-[10px] mt-1">Passphrases do not match</p>
+                     )}
+                   </div>
+               )}
 
                <div className="pt-2">
                  <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg">
@@ -263,6 +353,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                         <input 
                             type="checkbox" 
                             id="trust-host" 
+                            disabled={isInitializing}
                             className="rounded border-gray-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 cursor-pointer bg-white dark:bg-slate-700"
                             checked={repoForm.trustHost}
                             onChange={(e) => setRepoForm({...repoForm, trustHost: e.target.checked})}
@@ -276,13 +367,29 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                      </div>
                  </div>
                </div>
+               
+               {/* INIT FEEDBACK */}
+               {initError && (
+                   <div className="p-3 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-xs rounded-lg border border-red-200 dark:border-red-800">
+                       <strong>Error:</strong> {initError}
+                   </div>
+               )}
+               
+               {isInitializing && (
+                   <div className="bg-slate-900 p-3 rounded-lg text-xs font-mono text-slate-300 max-h-32 overflow-y-auto">
+                        <div className="flex items-center gap-2 text-blue-400 mb-2">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Initializing...
+                        </div>
+                        <div className="whitespace-pre-wrap">{initLog}</div>
+                   </div>
+               )}
 
              </div>
 
              <div className="px-6 py-4 bg-gray-50 dark:bg-slate-900/50 border-t border-gray-100 dark:border-slate-700 flex justify-end gap-3 shrink-0">
-               <Button variant="secondary" onClick={() => setIsModalOpen(false)} className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600">Cancel</Button>
-               <Button onClick={handleSave} disabled={!repoForm.name || !repoForm.url}>
-                   {editingRepoId ? 'Save Changes' : 'Add Repository'}
+               <Button variant="secondary" onClick={() => setIsModalOpen(false)} disabled={isInitializing} className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600">Cancel</Button>
+               <Button onClick={handleSave} disabled={!repoForm.name || !repoForm.url || isInitializing} loading={isInitializing}>
+                   {editingRepoId ? 'Save Changes' : (addMode === 'init' ? 'Initialize Repository' : 'Add Repository')}
                </Button>
              </div>
            </div>

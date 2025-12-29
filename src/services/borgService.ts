@@ -1,9 +1,32 @@
 
+
 // This service communicates with the Electron Main process
 
-// Since we are in Electron with nodeIntegration: true, we can require electron
-const { ipcRenderer } = (window as any).require('electron');
 import { formatBytes, formatDuration } from '../utils/formatters';
+
+// Helper to safely get ipcRenderer without crashing in Browser mode
+const getIpcRenderer = () => {
+    try {
+        if ((window as any).require) {
+            const electron = (window as any).require('electron');
+            return electron.ipcRenderer;
+        }
+    } catch (e) {
+        console.warn("Electron require failed", e);
+    }
+    
+    // Fallback for Browser/Dev mode (Prevents White Screen crash)
+    console.warn("WinBorg: Running in browser/mock mode. Electron features disabled.");
+    return {
+        invoke: async () => ({ success: false, error: "Running in browser mode (Mock)" }),
+        send: () => {},
+        on: () => {},
+        removeListener: () => {}
+    };
+};
+
+// Initialize lazily
+const ipcRenderer = getIpcRenderer();
 
 const getBorgConfig = () => {
     const storedWsl = localStorage.getItem('winborg_use_wsl');
@@ -127,6 +150,21 @@ export const borgService = {
     } finally {
       ipcRenderer.removeListener('terminal-log', logListener);
     }
+  },
+
+  initRepo: async (
+      repoUrl: string, 
+      encryption: 'repokey' | 'keyfile' | 'none', 
+      onLog: (text: string) => void,
+      overrides?: { repoId?: string, disableHostCheck?: boolean }
+  ): Promise<boolean> => {
+      // Argument Mapping: repokey -> repokey-blake2 (modern default), keyfile -> keyfile-blake2
+      let encMode: string = encryption;
+      if (encryption === 'repokey') encMode = 'repokey-blake2';
+      if (encryption === 'keyfile') encMode = 'keyfile-blake2';
+
+      const args = ['init', '--encryption', encMode, repoUrl];
+      return await borgService.runCommand(args, onLog, overrides);
   },
 
   compact: async (repoUrl: string, onLog: (text: string) => void, overrides?: { repoId?: string, disableHostCheck?: boolean }) => {
@@ -329,5 +367,29 @@ export const borgService = {
         useWsl: config.useWsl,
         executablePath: config.path 
     });
+  },
+
+  selectDirectory: async (): Promise<string[] | null> => {
+      try {
+        const result = await ipcRenderer.invoke('select-directory');
+        return !result.canceled ? result.filePaths : null;
+      } catch (e) {
+          console.error("Failed to select directory", e);
+          return null;
+      }
+  },
+
+  notify: (title: string, body: string) => {
+      if (!('Notification' in window)) return;
+      
+      if (Notification.permission === 'granted') {
+          new Notification(title, { body });
+      } else if (Notification.permission !== 'denied') {
+          Notification.requestPermission().then(permission => {
+              if (permission === 'granted') {
+                  new Notification(title, { body });
+              }
+          });
+      }
   }
 };
