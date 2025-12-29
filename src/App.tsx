@@ -120,6 +120,50 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem('winborg_activity', JSON.stringify(activityLogs)); }, [activityLogs]);
   useEffect(() => { localStorage.setItem('winborg_jobs', JSON.stringify(jobs)); }, [jobs]);
 
+  // --- SYNC SCHEDULER (New) ---
+  useEffect(() => {
+      try {
+          const { ipcRenderer } = (window as any).require('electron');
+          // Only send safe repo data (no sensitive flags if any existed, though we sanitized already)
+          const safeRepos = repos.map(r => ({ id: r.id, url: r.url, name: r.name }));
+          ipcRenderer.send('sync-scheduler-data', { jobs, repos: safeRepos });
+      } catch(e) {}
+  }, [jobs, repos]);
+
+  // --- BACKGROUND LISTENER (New) ---
+  useEffect(() => {
+      try {
+          const { ipcRenderer } = (window as any).require('electron');
+          
+          // Listen for background job completions to refresh UI state
+          const handleJobComplete = (_: any, jobId: string) => {
+              setJobs(prev => prev.map(j => j.id === jobId ? { ...j, lastRun: new Date().toISOString(), status: 'success' } : j));
+              // Also refresh activity log via the generic activity-log listener below
+          };
+
+          const handleActivityLog = (_: any, log: ActivityLogEntry) => {
+              // Add ID and Time if missing from backend
+              const newLog: ActivityLogEntry = {
+                  id: Math.random().toString(36).substr(2, 9),
+                  time: new Date().toISOString(),
+                  ...log
+              };
+              setActivityLogs(prev => [newLog, ...prev].slice(0, 100));
+              
+              if(log.status === 'success') toast.success(log.title);
+              if(log.status === 'error') toast.error(log.title);
+          };
+
+          ipcRenderer.on('job-complete', handleJobComplete);
+          ipcRenderer.on('activity-log', handleActivityLog);
+
+          return () => {
+              ipcRenderer.removeListener('job-complete', handleJobComplete);
+              ipcRenderer.removeListener('activity-log', handleActivityLog);
+          };
+      } catch(e) {}
+  }, []);
+
   // --- TASKBAR PROGRESS ---
   useEffect(() => {
       // Find max progress of any running check

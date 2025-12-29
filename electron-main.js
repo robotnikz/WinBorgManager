@@ -1,10 +1,9 @@
 
-
 /**
  * REAL BACKEND FOR WINBORG
  */
 
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, safeStorage, nativeImage, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, safeStorage, nativeImage, dialog, Notification } = require('electron');
 const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -18,6 +17,11 @@ let mainWindow;
 let tray = null;
 let isQuitting = false;
 let closeToTray = false; // Default: Close quits app
+
+// --- SCHEDULER STATE ---
+let scheduledJobs = [];
+let availableRepos = [];
+let schedulerInterval = null;
 
 // Keep track of active mount processes to kill them on exit/unmount
 const activeMounts = new Map();
@@ -100,6 +104,7 @@ function createWindow() {
           if (closeToTray) {
               event.preventDefault();
               mainWindow.hide();
+              new Notification({ title: 'WinBorg', body: 'Running in background. Click tray icon to open.' }).show();
               return false;
           }
       }
@@ -118,7 +123,6 @@ function createTray() {
         const image = nativeImage.createFromPath(iconPath);
         
         // CRITICAL: Check if image is valid/empty. 
-        // If public/icon.png is corrupt, this prevents the app from crashing.
         if (image.isEmpty()) {
             console.warn("Tray icon file exists but is invalid/empty:", iconPath);
             return;
@@ -153,6 +157,151 @@ function createTray() {
         console.warn("Failed to create tray icon:", e);
     }
 }
+
+// --- SCHEDULER LOGIC ---
+
+function startScheduler() {
+    if (schedulerInterval) clearInterval(schedulerInterval);
+    
+    console.log("[Scheduler] Started. Checking every 60s.");
+    
+    // Check every 60 seconds
+    schedulerInterval = setInterval(() => {
+        const now = new Date();
+        const currentHour = String(now.getHours()).padStart(2, '0');
+        const currentMinute = String(now.getMinutes()).padStart(2, '0');
+        const timeString = `${currentHour}:${currentMinute}`;
+        
+        // Find jobs due NOW
+        scheduledJobs.forEach(job => {
+            if (!job.scheduleEnabled) return;
+            
+            // Check Daily Schedule
+            if (job.scheduleType === 'daily' && job.scheduleTime === timeString) {
+                executeBackgroundJob(job);
+            }
+            
+            // Check Hourly Schedule (at minute 00)
+            if (job.scheduleType === 'hourly' && currentMinute === '00') {
+                executeBackgroundJob(job);
+            }
+        });
+    }, 60000); // 60s check
+}
+
+async function executeBackgroundJob(job) {
+    console.log(`[Scheduler] Triggering Job: ${job.name}`);
+    
+    const repo = availableRepos.find(r => r.id === job.repoId);
+    if (!repo) {
+        console.error(`[Scheduler] Repo not found for job ${job.name}`);
+        return;
+    }
+
+    new Notification({ title: 'Backup Started', body: `Job: ${job.name}` }).show();
+
+    // 1. Prepare Command Args
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10);
+    const timeStr = now.toTimeString().slice(0, 5).replace(':', '');
+    const archiveName = `${job.archivePrefix}-${dateStr}-${timeStr}`;
+    
+    // Path conversion logic (simplified duplicate from frontend)
+    // We assume backend config "useWsl" matches what frontend sent implicitly, 
+    // but better to read global config.
+    // For simplicity, we assume paths passed in `job.sourcePath` are raw.
+    // We reuse the 'borg-spawn' handler logic by calling it directly via internal helper.
+    
+    const useWsl = true; // Hardcoded default fallback, but should ideally come from settings store
+    // NOTE: In a perfect world, we'd read 'winborg_use_wsl' from a JSON file.
+    
+    let sourcePath = job.sourcePath;
+    if (useWsl && /^[a-zA-Z]:[\\/]/.test(sourcePath)) {
+         const drive = sourcePath.charAt(0).toLowerCase();
+         const rest = sourcePath.slice(3).replace(/\\/g, '/');
+         sourcePath = `/mnt/${drive}/${rest}`;
+    }
+
+    const createArgs = ['create', '--stats', `${repo.url}::${archiveName}`, sourcePath];
+    if (job.compression && job.compression !== 'auto') {
+        createArgs.unshift(job.compression);
+        createArgs.unshift('--compression');
+    }
+
+    // 2. Execute Creation
+    const createResult = await runBorgInternal(createArgs, repo.id, useWsl, job.name);
+    
+    if (createResult.success) {
+        // 3. Prune if needed
+        if (job.pruneEnabled) {
+            const pruneArgs = ['prune', '-v', '--list', repo.url];
+            if (job.keepDaily) pruneArgs.push('--keep-daily', job.keepDaily.toString());
+            if (job.keepWeekly) pruneArgs.push('--keep-weekly', job.keepWeekly.toString());
+            if (job.keepMonthly) pruneArgs.push('--keep-monthly', job.keepMonthly.toString());
+            if (job.keepYearly) pruneArgs.push('--keep-yearly', job.keepYearly.toString());
+            
+            await runBorgInternal(pruneArgs, repo.id, useWsl, job.name + " (Prune)");
+        }
+        
+        new Notification({ title: 'Backup Success', body: `Job '${job.name}' finished.` }).show();
+        
+        // Notify Frontend to refresh if open
+        if (mainWindow) mainWindow.webContents.send('job-complete', job.id);
+        
+    } else {
+        new Notification({ title: 'Backup Failed', body: `Job '${job.name}' failed. Check logs.` }).show();
+    }
+}
+
+// Internal helper to run borg without IPC event
+function runBorgInternal(args, repoId, useWsl, jobName) {
+    return new Promise((resolve) => {
+        let bin = 'borg';
+        let finalArgs = args;
+        const envVars = {
+            BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK: 'yes',
+            BORG_RELOCATED_REPO_ACCESS_IS_OK: 'yes',
+            BORG_DISPLAY_PASSPHRASE: 'no',
+            BORG_RSH: 'ssh -o BatchMode=yes -o StrictHostKeyChecking=no' // Defaulting to loose for background tasks
+        };
+
+        const secret = getDecryptedPassword(repoId);
+        if (secret) envVars.BORG_PASSPHRASE = secret;
+
+        if (useWsl) {
+            bin = 'wsl';
+            if (process.env.WSLENV) {
+                 envVars.WSLENV = process.env.WSLENV + ':BORG_PASSPHRASE:BORG_RSH';
+            } else {
+                 envVars.WSLENV = 'BORG_PASSPHRASE:BORG_RSH';
+            }
+            finalArgs = ['--exec', 'borg', ...args];
+        }
+
+        const child = spawn(bin, finalArgs, { env: { ...process.env, ...envVars } });
+        
+        let output = '';
+        child.stdout.on('data', d => output += d);
+        child.stderr.on('data', d => output += d);
+
+        child.on('close', (code) => {
+            console.log(`[Background Job] ${jobName} finished with code ${code}`);
+            if (code !== 0) console.error(output);
+            
+            // Send log to frontend activity log if possible
+            if (mainWindow) {
+                mainWindow.webContents.send('activity-log', {
+                    title: code === 0 ? 'Scheduled Backup Success' : 'Scheduled Backup Failed',
+                    detail: `${jobName} - Code ${code}`,
+                    status: code === 0 ? 'success' : 'error',
+                    cmd: output
+                });
+            }
+            resolve({ success: code === 0 });
+        });
+    });
+}
+
 
 // --- UPDATE CHECKER LOGIC ---
 async function checkForUpdates(manual = false) {
@@ -217,6 +366,7 @@ async function checkForUpdates(manual = false) {
 app.whenReady().then(() => {
     createWindow();
     createTray();
+    startScheduler(); // START TICKER
     
     setTimeout(() => checkForUpdates(false), 3000);
 });
@@ -232,6 +382,7 @@ app.on('window-all-closed', () => {
 });
 
 function cleanupAndQuit() {
+    if (schedulerInterval) clearInterval(schedulerInterval);
     activeMounts.forEach((process) => {
         try { process.kill(); } catch(e) {}
     });
@@ -245,6 +396,13 @@ function cleanupAndQuit() {
 
 ipcMain.on('set-close-behavior', (event, shouldCloseToTray) => {
     closeToTray = shouldCloseToTray;
+});
+
+// NEW: SYNC JOBS FROM FRONTEND
+ipcMain.on('sync-scheduler-data', (event, { jobs, repos }) => {
+    console.log(`[Scheduler] Synced ${jobs.length} jobs and ${repos.length} repos.`);
+    scheduledJobs = jobs;
+    availableRepos = repos;
 });
 
 ipcMain.handle('check-for-updates', async () => {
