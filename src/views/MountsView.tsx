@@ -18,12 +18,16 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
   const [selectedArchive, setSelectedArchive] = useState(archives[0]?.name || '');
   const [commandPreview, setCommandPreview] = useState('');
   
+  // ALWAYS DEFAULT TO TRUE FOR WSL AS REQUESTED
   const [useWsl, setUseWsl] = useState(true);
   
+  // Initialize state based on props and config
   useEffect(() => {
      const storedWsl = localStorage.getItem('winborg_use_wsl');
+     // Default to TRUE if not set, or if set to true
      setUseWsl(storedWsl === null ? true : storedWsl === 'true');
 
+     // Handle Preselection
      if (preselectedRepoId) {
         setIsCreating(true);
         setSelectedRepo(preselectedRepoId);
@@ -31,6 +35,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
         setSelectedRepo(repos[0].id);
      }
 
+     // Handle Archive Selection
      if (!selectedArchive && archives.length > 0) {
         setSelectedArchive(archives[0].name);
      } else if (archives.length > 0 && !archives.find(a => a.name === selectedArchive)) {
@@ -38,12 +43,16 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
      }
   }, [repos, archives, selectedRepo, selectedArchive, preselectedRepoId]);
 
+  // Effect to generate command preview locally (No AI needed)
   useEffect(() => {
     if (isCreating) {
       const repo = repos.find(r => r.id === selectedRepo);
       if (repo) {
+        // Internal Linux Path logic for preview
         const archiveNameClean = selectedArchive.replace(/[^a-zA-Z0-9._-]/g, '_');
         const internalPath = `/mnt/wsl/winborg/${archiveNameClean}`;
+        
+        // Simple command construction
         const cmd = `borg mount -o allow_other ${repo.url}::${selectedArchive} ${internalPath}`;
         setCommandPreview(cmd);
       }
@@ -51,11 +60,17 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
   }, [isCreating, selectedRepo, selectedArchive, repos]);
 
   const handleMount = () => {
+    // FORCE PATH LOGIC:
+    // If WSL: /mnt/wsl/winborg/<ArchiveName>
+    // If Windows Native (Fallback): Z:
     let finalPath = 'Z:';
+    
     if (useWsl) {
+        // CLEANUP ARCHIVE NAME FOR PATH (remove timestamp parts if messy)
         const archiveNameClean = selectedArchive.replace(/[^a-zA-Z0-9._-]/g, '_');
         finalPath = `/mnt/wsl/winborg/${archiveNameClean}`;
     }
+
     onMount(selectedRepo, selectedArchive, finalPath);
     setIsCreating(false);
   };
@@ -63,12 +78,19 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
   const handleOpenFolder = (path: string) => {
     try {
         const { ipcRenderer } = (window as any).require('electron');
+        
         let pathToSend = path;
         
+        // Transform Linux WSL path to Windows UNC path for standard Ubuntu
         if (path.startsWith('/')) {
+             // 1. Convert forward slashes to backslashes
              const windowsStyle = path.replace(/\//g, '\\');
+             // 2. Prepend the WSL network path for Ubuntu
+             // Result: \\wsl.localhost\Ubuntu\mnt\wsl\winborg\archive_name
              pathToSend = `\\\\wsl.localhost\\Ubuntu${windowsStyle}`;
         }
+
+        console.log("Opening Path:", pathToSend);
         ipcRenderer.send('open-path', pathToSend);
     } catch(e) {
         alert(`Could not open path: ${path}`);
@@ -76,8 +98,16 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
   };
 
   const currentRepoStatus = repos.find(r => r.id === selectedRepo)?.status;
-  const internalPath = useWsl ? `/mnt/wsl/winborg/${selectedArchive || '...'}` : 'Z:';
-  const explorerPathHint = useWsl ? `\\\\wsl.localhost\\Ubuntu${internalPath.replace(/\//g, '\\')}` : internalPath;
+  
+  // Dynamic Preview for the UI
+  // Note: We display the internal Linux path for tech correctness, but show the UNC hint below
+  const internalPath = useWsl 
+    ? `/mnt/wsl/winborg/${selectedArchive || '...'}` 
+    : 'Z:';
+
+  const explorerPathHint = useWsl 
+    ? `\\\\wsl.localhost\\Ubuntu${internalPath.replace(/\//g, '\\')}`
+    : internalPath;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -98,6 +128,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
                 {useWsl && <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded">WSL Mode Active</span>}
            </div>
            
+           {/* 2 Column Grid */}
            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
              <div>
                <label className="block text-xs font-medium text-slate-500 mb-1">Repository</label>
@@ -130,6 +161,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
              </div>
            </div>
 
+           {/* Info Banner showing the path */}
            <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-800">
                <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
                <div className="flex-1 font-mono text-xs break-all">
@@ -138,6 +170,7 @@ const MountsView: React.FC<MountsViewProps> = ({ mounts, repos, archives, onUnmo
                </div>
            </div>
            
+           {/* Command Preview Box */}
            <div className="mt-2 bg-slate-900 rounded-md p-3 font-mono text-xs text-green-400 overflow-x-auto">
               <div className="flex items-center gap-2 mb-2 text-slate-400 border-b border-slate-700 pb-1">
                  <Terminal className="w-3 h-3" />

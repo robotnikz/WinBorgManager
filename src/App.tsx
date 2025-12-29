@@ -26,7 +26,6 @@ const App: React.FC = () => {
         if (savedRepos) {
             try {
                 const parsed = JSON.parse(savedRepos);
-                // Reset temporary states on reload
                 return parsed.map((r: Repository) => ({
                     ...r,
                     status: 'disconnected', 
@@ -82,9 +81,14 @@ const App: React.FC = () => {
 
   // Helper to check lock status for a repo
   const checkRepoLock = async (repo: Repository) => {
+      // Don't check if we don't have enough info
       if(!repo.url) return;
+      
       const isLocked = await borgService.checkLockStatus(repo.url, { disableHostCheck: repo.trustHost });
+      
       setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, isLocked } : r));
+      
+      if(isLocked) console.log(`[Lock Check] Repo ${repo.name} is LOCKED.`);
   };
 
   // INITIAL LOAD: Check locks for all repos
@@ -93,15 +97,16 @@ const App: React.FC = () => {
           checkRepoLock(repo);
       });
       // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); 
+  }, []); // Run once on mount using initial repos state
 
-  // NEW: Listen for unexpected mount crashes
+  // NEW: Listen for unexpected mount crashes to keep UI in sync
   useEffect(() => {
     try {
         const { ipcRenderer } = (window as any).require('electron');
         const handleMountExited = (_: any, { mountId, code }: { mountId: string, code: number }) => {
             console.log(`Mount ${mountId} exited with code ${code}`);
             
+            // Check lock status for the affected repo
             const affectedMount = mounts.find(m => m.id === mountId);
             if(affectedMount) {
                 const repo = repos.find(r => r.id === affectedMount.repoId);
@@ -131,9 +136,11 @@ const App: React.FC = () => {
   const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
   const [terminalTitle, setTerminalTitle] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // FUSE Help Modal State
   const [showFuseHelp, setShowFuseHelp] = useState(false);
 
-  // Helper to run commands
+  // Helper to run commands with terminal feedback
   const runCommand = async (
       title: string, 
       args: string[], 
@@ -183,6 +190,7 @@ const App: React.FC = () => {
     );
 
     setIsProcessing(false);
+    // Update lock status regardless of success (mount creates locks)
     setTimeout(() => checkRepoLock(repo), 1000);
 
     if (result.success) {
@@ -198,8 +206,10 @@ const App: React.FC = () => {
         setMounts(prev => [...prev, newMount]);
         setCurrentView(View.MOUNTS);
         
+        // AUTO OPEN EXPLORER
         try {
             const { ipcRenderer } = (window as any).require('electron');
+            // We pass the path directly. If it is linux path, backend will handle it via wsl --exec explorer.exe
             ipcRenderer.send('open-path', path);
         } catch(e) { console.error("Could not auto-open explorer"); }
         
@@ -241,6 +251,7 @@ const App: React.FC = () => {
   };
 
   const handleFetchArchiveStats = async (repo: Repository, archiveName: string) => {
+     console.log(`Fetching stats for ${archiveName}...`);
      const stats = await borgService.getArchiveInfo(repo.url, archiveName, {
          passphrase: repo.passphrase,
          disableHostCheck: repo.trustHost
@@ -265,6 +276,7 @@ const App: React.FC = () => {
         `Connecting to ${repo.name}`, 
         ['list', '--json', repo.url], 
         (rawOutput) => {
+            // After connection attempt, check locks
             checkRepoLock(repo);
 
             try {
@@ -316,6 +328,7 @@ const App: React.FC = () => {
                 }, 800);
 
             } catch (e) {
+                console.error("Failed to parse Borg JSON", e);
                 addActivity('Connection Failed', `Failed to parse response from ${repo.name}`, 'error');
                 setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, status: 'error' } : r));
             }
@@ -335,7 +348,7 @@ const App: React.FC = () => {
           ...r, 
           checkStatus: 'running', 
           checkProgress: 0, 
-          checkStartTime: Date.now(),
+          checkStartTime: Date.now(), // Store start time for ETA calculation
           activeCommandId: commandId
       } : r));
       
@@ -357,6 +370,7 @@ const App: React.FC = () => {
           { passphrase: repo.passphrase, disableHostCheck: repo.trustHost, commandId: commandId }
       );
 
+      // Check locks after operation finishes
       await checkRepoLock(repo);
 
       setRepos(prev => {
@@ -368,7 +382,7 @@ const App: React.FC = () => {
             ...r, 
             checkStatus: success ? 'ok' : 'error', 
             checkProgress: success ? 100 : undefined,
-            checkStartTime: undefined, 
+            checkStartTime: undefined, // Clear start time
             lastCheckTime: new Date().toLocaleString(), 
             activeCommandId: undefined
           } : r);
@@ -387,7 +401,7 @@ const App: React.FC = () => {
   };
   
   const handleBreakLock = async (repo: Repository) => {
-      if(!window.confirm(`FORCE UNLOCK REPO?\n\nThis will run 'borg break-lock'.`)) return;
+      if(!window.confirm(`FORCE UNLOCK REPO?\n\nThis will run 'borg break-lock' and force delete lock files.`)) return;
       setTerminalTitle(`Unlocking Repo: ${repo.name}`);
       setTerminalLogs([]);
       setIsProcessing(true);
@@ -405,6 +419,8 @@ const App: React.FC = () => {
       );
 
       setIsProcessing(false);
+      
+      // Verify lock is gone
       await checkRepoLock(repo);
 
       if(deleteSuccess) addActivity('Unlock Successful', `Lock files removed for ${repo.name}`, 'success');
