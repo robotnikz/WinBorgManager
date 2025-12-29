@@ -3,7 +3,7 @@
  * REAL BACKEND FOR WINBORG
  */
 
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, safeStorage, nativeImage, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, safeStorage, nativeImage } = require('electron');
 const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -168,14 +168,6 @@ ipcMain.on('open-path', (event, pathString) => {
     } else {
         shell.openPath(pathString).catch(error => console.error(error));
     }
-});
-
-ipcMain.handle('select-directory', async (event) => {
-    if (!mainWindow) return { canceled: true, filePaths: [] };
-    const result = await dialog.showOpenDialog(mainWindow, {
-        properties: ['openDirectory', 'multiSelections']
-    });
-    return result;
 });
 
 // --- SECRETS API ---

@@ -1,32 +1,9 @@
 
-
 // This service communicates with the Electron Main process
 
+// Since we are in Electron with nodeIntegration: true, we can require electron
+const { ipcRenderer } = (window as any).require('electron');
 import { formatBytes, formatDuration } from '../utils/formatters';
-
-// Helper to safely get ipcRenderer without crashing in Browser mode
-const getIpcRenderer = () => {
-    try {
-        if ((window as any).require) {
-            const electron = (window as any).require('electron');
-            return electron.ipcRenderer;
-        }
-    } catch (e) {
-        console.warn("Electron require failed", e);
-    }
-    
-    // Fallback for Browser/Dev mode (Prevents White Screen crash)
-    console.warn("WinBorg: Running in browser/mock mode. Electron features disabled.");
-    return {
-        invoke: async () => ({ success: false, error: "Running in browser mode (Mock)" }),
-        send: () => {},
-        on: () => {},
-        removeListener: () => {}
-    };
-};
-
-// Initialize lazily
-const ipcRenderer = getIpcRenderer();
 
 const getBorgConfig = () => {
     const storedWsl = localStorage.getItem('winborg_use_wsl');
@@ -352,58 +329,5 @@ export const borgService = {
         useWsl: config.useWsl,
         executablePath: config.path 
     });
-  },
-
-  selectDirectory: async (): Promise<string[] | null> => {
-      try {
-        const result = await ipcRenderer.invoke('select-directory');
-        return !result.canceled ? result.filePaths : null;
-      } catch (e) {
-          console.error("Failed to select directory", e);
-          return null;
-      }
-  },
-
-  createArchive: async (
-      repoUrl: string, 
-      archiveName: string, 
-      sourcePaths: string[], 
-      onLog: (text: string) => void,
-      overrides?: { repoId?: string, disableHostCheck?: boolean }
-  ): Promise<boolean> => {
-      const config = getBorgConfig();
-      
-      // Convert paths for WSL if needed
-      let paths = sourcePaths;
-      if (config.useWsl) {
-          paths = sourcePaths.map(p => {
-              // Convert C:\Path to /mnt/c/Path
-              if (/^[a-zA-Z]:[\\/]/.test(p)) {
-                  const drive = p.charAt(0).toLowerCase();
-                  const rest = p.slice(3).replace(/\\/g, '/');
-                  return `/mnt/${drive}/${rest}`;
-              }
-              return p.replace(/\\/g, '/');
-          });
-      }
-
-      // Create command: borg create --progress --stats REPO::ARCHIVE PATHS...
-      const args = ['create', '--progress', '--stats', `${repoUrl}::${archiveName}`, ...paths];
-      
-      return await borgService.runCommand(args, onLog, overrides);
-  },
-
-  notify: (title: string, body: string) => {
-      if (!('Notification' in window)) return;
-      
-      if (Notification.permission === 'granted') {
-          new Notification(title, { body });
-      } else if (Notification.permission !== 'denied') {
-          Notification.requestPermission().then(permission => {
-              if (permission === 'granted') {
-                  new Notification(title, { body });
-              }
-          });
-      }
   }
 };
