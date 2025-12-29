@@ -40,7 +40,7 @@ const MaintenanceModal: React.FC<MaintenanceModalProps> = ({ repo, isOpen, onClo
               repo.url,
               { daily: keepDaily, weekly: keepWeekly, monthly: keepMonthly },
               logCollector,
-              { passphrase: repo.passphrase, disableHostCheck: repo.trustHost }
+              { repoId: repo.id, disableHostCheck: repo.trustHost }
           );
           
           onClose(); // Close this modal
@@ -67,7 +67,7 @@ const MaintenanceModal: React.FC<MaintenanceModalProps> = ({ repo, isOpen, onClo
           const success = await borgService.compact(
               repo.url,
               logCollector,
-              { passphrase: repo.passphrase, disableHostCheck: repo.trustHost }
+              { repoId: repo.id, disableHostCheck: repo.trustHost }
           );
           
           onClose();

@@ -20,11 +20,9 @@ const App: React.FC = () => {
   // --- THEME STATE ---
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
       const saved = localStorage.getItem('winborg_theme');
-      // Default to TRUE (Dark Mode) if not set
       return saved ? saved === 'dark' : true;
   });
 
-  // Effect: Apply class to HTML tag for Tailwind
   useEffect(() => {
       localStorage.setItem('winborg_theme', isDarkMode ? 'dark' : 'light');
       if (isDarkMode) {
@@ -45,9 +43,10 @@ const App: React.FC = () => {
         if (savedRepos) {
             try {
                 const parsed = JSON.parse(savedRepos);
-                // Reset temporary states on reload
+                // Sanitize: ensure no passphrase fields are ever loaded from old localstorage
                 return parsed.map((r: Repository) => ({
                     ...r,
+                    passphrase: undefined, // SECURITY: Never keep plain text in state
                     status: 'disconnected', 
                     checkStatus: r.checkStatus === 'running' ? 'idle' : r.checkStatus,
                     checkProgress: r.checkStatus === 'running' ? undefined : r.checkProgress,
@@ -61,7 +60,7 @@ const App: React.FC = () => {
         return [];
     } else {
         localStorage.setItem('winborg_initialized', 'true');
-        return MOCK_REPOS;
+        return []; // No mock repos by default to avoid confusion with real security
     }
   });
 
@@ -82,9 +81,31 @@ const App: React.FC = () => {
   });
   
   // Persist State
-  useEffect(() => { localStorage.setItem('winborg_repos', JSON.stringify(repos)); }, [repos]);
+  useEffect(() => { 
+      // Security: Strip passphrases (if any accidentally exist) before saving
+      const safeRepos = repos.map(r => {
+          const { passphrase, ...safe } = r;
+          return safe;
+      });
+      localStorage.setItem('winborg_repos', JSON.stringify(safeRepos)); 
+  }, [repos]);
+
   useEffect(() => { localStorage.setItem('winborg_archives', JSON.stringify(archives)); }, [archives]);
   useEffect(() => { localStorage.setItem('winborg_activity', JSON.stringify(activityLogs)); }, [activityLogs]);
+
+  // --- TASKBAR PROGRESS ---
+  useEffect(() => {
+      // Find max progress of any running check
+      const runningRepo = repos.find(r => r.checkStatus === 'running');
+      try {
+          const { ipcRenderer } = (window as any).require('electron');
+          if (runningRepo && runningRepo.checkProgress !== undefined) {
+              ipcRenderer.send('set-progress', runningRepo.checkProgress / 100);
+          } else {
+              ipcRenderer.send('set-progress', -1); // Remove
+          }
+      } catch(e) {}
+  }, [repos]);
 
   // Helper to add activity
   const addActivity = (title: string, detail: string, status: 'success' | 'warning' | 'error' | 'info', cmd?: string) => {
@@ -106,15 +127,13 @@ const App: React.FC = () => {
       setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, isLocked } : r));
   };
 
-  // INITIAL LOAD: Check locks for all repos
+  // INITIAL LOAD
   useEffect(() => {
-      repos.forEach(repo => {
-          checkRepoLock(repo);
-      });
+      repos.forEach(repo => checkRepoLock(repo));
       // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
-  // NEW: Listen for unexpected mount crashes
+  // Mount Listener
   useEffect(() => {
     try {
         const { ipcRenderer } = (window as any).require('electron');
@@ -152,12 +171,12 @@ const App: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showFuseHelp, setShowFuseHelp] = useState(false);
 
-  // Helper to run commands
+  // Helper to run commands (UPDATED for Secure Backend Injection)
   const runCommand = async (
       title: string, 
       args: string[], 
       onSuccess?: (output: string) => void,
-      overrides?: { passphrase?: string, disableHostCheck?: boolean }
+      overrides?: { repoId?: string, disableHostCheck?: boolean }
   ) => {
     setTerminalTitle(title);
     setTerminalLogs([]);
@@ -196,7 +215,7 @@ const App: React.FC = () => {
             setTerminalLogs(prev => [...prev, log.trim()]);
         }, 
         {
-            passphrase: repo.passphrase,
+            repoId: repo.id, // Secure Injection
             disableHostCheck: repo.trustHost
         }
     );
@@ -261,7 +280,7 @@ const App: React.FC = () => {
 
   const handleFetchArchiveStats = async (repo: Repository, archiveName: string) => {
      const stats = await borgService.getArchiveInfo(repo.url, archiveName, {
-         passphrase: repo.passphrase,
+         repoId: repo.id,
          disableHostCheck: repo.trustHost
      });
 
@@ -275,10 +294,8 @@ const App: React.FC = () => {
      }
   };
 
-  const handleConnect = (repo: Repository, overrides?: { passphrase?: string, disableHostCheck?: boolean }) => {
+  const handleConnect = (repo: Repository) => {
     setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, status: 'connecting' } : r));
-    const effectivePassphrase = overrides?.passphrase || repo.passphrase;
-    const effectiveHostCheck = overrides?.disableHostCheck !== undefined ? overrides.disableHostCheck : repo.trustHost;
 
     runCommand(
         `Connecting to ${repo.name}`, 
@@ -330,7 +347,7 @@ const App: React.FC = () => {
                                  setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, size: sizeStr } : r));
                              } catch(e) {}
                         },
-                        { passphrase: effectivePassphrase, disableHostCheck: effectiveHostCheck }
+                        { repoId: repo.id, disableHostCheck: repo.trustHost }
                      );
                 }, 800);
 
@@ -339,7 +356,7 @@ const App: React.FC = () => {
                 setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, status: 'error' } : r));
             }
         },
-        { passphrase: effectivePassphrase, disableHostCheck: effectiveHostCheck }
+        { repoId: repo.id, disableHostCheck: repo.trustHost } // Secure Injection
     );
   };
 
@@ -373,7 +390,7 @@ const App: React.FC = () => {
       const success = await borgService.runCommand(
           ['check', '--progress', repo.url], 
           progressCallback,
-          { passphrase: repo.passphrase, disableHostCheck: repo.trustHost, commandId: commandId }
+          { repoId: repo.id, disableHostCheck: repo.trustHost, commandId: commandId }
       );
 
       await checkRepoLock(repo);
@@ -414,13 +431,13 @@ const App: React.FC = () => {
       await borgService.breakLock(
           repo.url,
           (log) => setTerminalLogs(prev => [...prev, log.trim()]),
-          { passphrase: repo.passphrase, disableHostCheck: repo.trustHost }
+          { repoId: repo.id, disableHostCheck: repo.trustHost }
       );
       
       const deleteSuccess = await borgService.forceDeleteLockFiles(
           repo.url,
           (log) => setTerminalLogs(prev => [...prev, log.trim()]),
-          { passphrase: repo.passphrase, disableHostCheck: repo.trustHost }
+          { disableHostCheck: repo.trustHost }
       );
 
       setIsProcessing(false);
@@ -443,9 +460,15 @@ const App: React.FC = () => {
   };
 
   const handleAddRepo = (repoData: any) => {
+    // If ID was generated in RepositoriesView (for secret saving), use it.
+    // Otherwise gen new.
     const newRepo: Repository = {
-       id: Math.random().toString(36).substr(2, 9),
-       ...repoData,
+       id: repoData.id || Math.random().toString(36).substr(2, 9),
+       name: repoData.name,
+       url: repoData.url,
+       encryption: repoData.encryption,
+       trustHost: repoData.trustHost,
+       // IMPORTANT: Do NOT include passphrase here. It is saved in backend.
        lastBackup: 'Never',
        status: 'disconnected',
        size: 'Unknown',
@@ -454,6 +477,7 @@ const App: React.FC = () => {
        lastCheckTime: 'Never'
     };
     setRepos(prev => [...prev, newRepo]);
+    // Try connecting immediately
     handleConnect(newRepo);
   };
 
@@ -461,8 +485,12 @@ const App: React.FC = () => {
      setRepos(prev => prev.map(r => r.id === id ? { ...r, ...repoData, status: 'disconnected' } : r));
   };
 
-  const handleDeleteRepo = (repoId: string) => {
-      if (window.confirm("Remove this repository?")) setRepos(prev => prev.filter(r => r.id !== repoId));
+  const handleDeleteRepo = async (repoId: string) => {
+      if (window.confirm("Remove this repository?")) {
+          // Clean up secret
+          await borgService.deletePassphrase(repoId);
+          setRepos(prev => prev.filter(r => r.id !== repoId));
+      }
   };
 
   const renderContent = () => {

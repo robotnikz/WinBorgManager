@@ -1,6 +1,6 @@
 import React from 'react';
 import { Repository } from '../types';
-import { Server, Shield, Clock, HardDrive, Trash2, Loader2, Edit2, ShieldCheck, Unlock, Lock, Wrench } from 'lucide-react';
+import { Server, Shield, Clock, HardDrive, Trash2, Loader2, Edit2, ShieldCheck, Unlock, Lock, Wrench, Key } from 'lucide-react';
 
 interface RepoCardProps {
   repo: Repository;
@@ -11,16 +11,17 @@ interface RepoCardProps {
   onCheck?: (repo: Repository) => void;
   onBreakLock?: (repo: Repository) => void;
   onMaintenance?: (repo: Repository) => void;
+  onExportKey?: (repo: Repository) => void;
 }
 
-const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete, onEdit, onCheck, onBreakLock, onMaintenance }) => {
+const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete, onEdit, onCheck, onBreakLock, onMaintenance, onExportKey }) => {
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200/75 dark:border-slate-700 p-5 shadow-sm hover:shadow-md transition-all duration-200 group relative overflow-hidden flex flex-col h-full">
       
       {/* Top Row: Icon + Name + Unified Toolbar */}
       <div className="flex justify-between items-start mb-5 gap-3">
         
-        {/* Left: Icon & Title - Flex-1 ensures it takes remaining space, min-w-0 forces truncation inside flex */}
+        {/* Left: Icon & Title */}
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className={`p-2.5 rounded-lg transition-colors shrink-0 ${
             repo.status === 'connected' ? 'bg-blue-600 text-white shadow-md shadow-blue-200 dark:shadow-blue-900/50' : 'bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-400'
@@ -33,17 +34,17 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
           </div>
         </div>
         
-        {/* Right: Unified Control Pill - Compacted for space */}
+        {/* Right: Unified Control Pill */}
         <div className="flex items-center bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg p-1 shadow-sm gap-1 shrink-0 ml-auto">
             
-            {/* Locked Indicator - Icon Only on narrow cards */}
+            {/* Locked Indicator */}
             {repo.isLocked && (
-                 <div className="flex items-center justify-center w-7 h-7 rounded-md bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800" title="Repo is Locked (lock.roster exists)">
+                 <div className="flex items-center justify-center w-7 h-7 rounded-md bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800" title="Repo is Locked">
                      <Lock className="w-3.5 h-3.5" />
                  </div>
             )}
 
-            {/* Status Section - COMPACT (Dot Only) to prevent overlap */}
+            {/* Status Section */}
             <div 
                 className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
                   repo.status === 'connected' ? 'bg-green-50 dark:bg-green-900/30' : 
@@ -59,7 +60,6 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
                 }`} />
             </div>
 
-            {/* Divider */}
             <div className="w-px h-4 bg-gray-200 dark:bg-slate-700 mx-0.5"></div>
 
             {/* Actions Section */}
@@ -71,6 +71,16 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
                         title="Maintenance (Prune/Compact)"
                     >
                         <Wrench className="w-3.5 h-3.5" />
+                    </button>
+                )}
+                
+                {onExportKey && repo.encryption !== 'none' && (
+                    <button 
+                        onClick={() => onExportKey(repo)}
+                        className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-yellow-600 dark:hover:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-md transition-all"
+                        title="Export/Recover Key"
+                    >
+                        <Key className="w-3.5 h-3.5" />
                     </button>
                 )}
 
@@ -97,7 +107,7 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
         </div>
       </div>
 
-      {/* Info Grid - Pushes to bottom of flex col */}
+      {/* Info Grid */}
       <div className="grid grid-cols-2 gap-y-3 gap-x-4 mb-5 p-3 bg-slate-50/50 dark:bg-slate-900/50 rounded-lg border border-slate-100/50 dark:border-slate-700/50 mt-auto">
         <div className="flex items-center gap-2.5 text-xs text-slate-600 dark:text-slate-400">
           <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
@@ -139,7 +149,6 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
             )}
          </div>
          
-         {/* Secondary / Maintenance Actions */}
          <div className="flex gap-2 pt-1">
              {onCheck && repo.status === 'connected' && (
                 <button 
@@ -154,7 +163,7 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
                  <button 
                    onClick={() => onBreakLock(repo)}
                    className="flex-1 px-3 py-1.5 text-[10px] font-medium text-slate-400 dark:text-slate-500 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-orange-50/50 dark:hover:bg-orange-900/10 border border-transparent rounded-lg transition-colors flex items-center justify-center gap-1.5"
-                   title="Force break lock if repo is stuck"
+                   title="Force break lock"
                 >
                    <Unlock className="w-3 h-3" /> Unlock
                 </button>

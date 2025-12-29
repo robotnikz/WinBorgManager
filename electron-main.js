@@ -3,18 +3,56 @@
  * REAL BACKEND FOR WINBORG
  */
 
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, safeStorage, nativeImage } = require('electron');
 const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
 let mainWindow;
+let tray = null;
+let isQuitting = false;
+
 // Keep track of active mount processes to kill them on exit/unmount
 const activeMounts = new Map();
-// NEW: Keep track of general active commands (like check, list) to allow aborting
+// Keep track of general active processes
 const activeProcesses = new Map();
 
-// Helper to determine if we are in development mode
+// SECRETS MANAGEMENT
+const secretsPath = path.join(app.getPath('userData'), 'secrets.json');
+let secretsCache = {};
+
+// Load secrets on startup
+try {
+    if (fs.existsSync(secretsPath)) {
+        secretsCache = JSON.parse(fs.readFileSync(secretsPath, 'utf8'));
+    }
+} catch (e) {
+    console.error("Failed to load secrets", e);
+}
+
+// Helper: Save secrets to disk
+function persistSecrets() {
+    try {
+        fs.writeFileSync(secretsPath, JSON.stringify(secretsCache));
+    } catch (e) {
+        console.error("Failed to save secrets", e);
+    }
+}
+
+// Helper: Get decrypted password for a repo
+function getDecryptedPassword(repoId) {
+    if (!repoId || !secretsCache[repoId]) return null;
+    try {
+        if (safeStorage.isEncryptionAvailable()) {
+            const buffer = Buffer.from(secretsCache[repoId], 'hex');
+            return safeStorage.decryptString(buffer);
+        }
+    } catch (e) {
+        console.error("Failed to decrypt password for " + repoId, e);
+    }
+    return null;
+}
+
 const isDev = !app.isPackaged;
 
 function createWindow() {
@@ -23,119 +61,164 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    frame: false, // Frameless for custom Windows 11 UI
+    frame: false, 
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false, // Security: Allow direct access to node in renderer for this local app
-      webSecurity: false // Sometimes needed for local file loading in dev, can be stricter in prod
+      contextIsolation: false, 
+      webSecurity: false 
     },
     backgroundColor: '#f3f3f3',
     icon: path.join(__dirname, 'public/icon.png'),
-    // Windows 11 styling hint
     titleBarStyle: 'hidden',
     titleBarOverlay: false
   });
 
   if (isDev) {
-    // Development: Load from Vite Dev Server
-    console.log('Running in Development Mode');
     mainWindow.loadURL('http://localhost:5173');
   } else {
-    // Production: Load from built files
-    console.log('Running in Production Mode');
     mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
   }
+
+  // Handle Close (Minimize to Tray instead of Quit)
+  mainWindow.on('close', (event) => {
+      if (!isQuitting) {
+          event.preventDefault();
+          mainWindow.hide();
+          return false;
+      }
+  });
 }
 
-app.whenReady().then(createWindow);
+function createTray() {
+    const iconPath = path.join(__dirname, 'public/icon.png');
+    const trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16 });
+    
+    tray = new Tray(trayIcon);
+    tray.setToolTip('WinBorg Manager');
+    
+    const contextMenu = Menu.buildFromTemplate([
+        { label: 'Open WinBorg', click: () => mainWindow.show() },
+        { type: 'separator' },
+        { label: 'Quit', click: () => {
+            isQuitting = true;
+            app.quit();
+        }}
+    ]);
+    
+    tray.setContextMenu(contextMenu);
+    tray.on('double-click', () => mainWindow.show());
+}
+
+app.whenReady().then(() => {
+    createWindow();
+    createTray();
+});
+
+app.on('before-quit', () => {
+    isQuitting = true;
+});
 
 app.on('window-all-closed', () => {
-  // Clean up mounts before quitting
-  activeMounts.forEach((process) => {
-    try { process.kill(); } catch(e) {}
-  });
-  activeProcesses.forEach((process) => {
-    try { process.kill(); } catch(e) {}
-  });
-  if (process.platform !== 'darwin') app.quit();
+  // Do NOT quit automatically on Windows close, wait for Tray Quit
+  if (process.platform !== 'darwin' && isQuitting) {
+      cleanupAndQuit();
+  }
 });
+
+function cleanupAndQuit() {
+    activeMounts.forEach((process) => {
+        try { process.kill(); } catch(e) {}
+    });
+    activeProcesses.forEach((process) => {
+        try { process.kill(); } catch(e) {}
+    });
+    app.quit();
+}
 
 // --- WINDOW CONTROLS HANDLERS ---
-ipcMain.on('window-minimize', () => {
-    if (mainWindow) mainWindow.minimize();
-});
-
+ipcMain.on('window-minimize', () => { if (mainWindow) mainWindow.minimize(); });
 ipcMain.on('window-maximize', () => {
     if (mainWindow) {
-        if (mainWindow.isMaximized()) {
-            mainWindow.unmaximize();
-        } else {
-            mainWindow.maximize();
-        }
+        mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
     }
 });
-
 ipcMain.on('window-close', () => {
-    if (mainWindow) mainWindow.close();
+    // This triggers the 'close' event on BrowserWindow, which we intercept above
+    if (mainWindow) mainWindow.close(); 
+});
+
+// --- TASKBAR PROGRESS ---
+ipcMain.on('set-progress', (event, progress) => {
+    // progress should be 0 to 1, or -1 to remove
+    if (mainWindow) {
+        mainWindow.setProgressBar(progress);
+    }
 });
 
 ipcMain.on('open-path', (event, pathString) => {
     console.log("Opening Path:", pathString);
-    
-    // LINUX PATH HANDLING (WSL)
     if (pathString.startsWith('/') || pathString.startsWith('\\\\wsl')) {
-        // If it looks like a Linux path OR a UNC path to WSL
-        
-        // METHOD 1: Use `wsl --exec explorer.exe <path>`
-        // This is robust because we execute explorer from WITHIN linux context, so it handles the path translation.
-        // If path is \\wsl$\..., we might need to be careful, but /mnt/wsl/... definitely works here.
-        
         let linuxPath = pathString;
-        
-        // If it was converted to UNC by frontend, convert back to linux for wsl --exec
-        // e.g. \\wsl$\Ubuntu\mnt\wsl\winborg -> /mnt/wsl/winborg
         if (pathString.startsWith('\\\\')) {
-             // Simplistic attempt: Just try to open it natively in Windows first
-             shell.openPath(pathString).then((err) => {
-                 if (err) {
-                     // If native open fails, log it
-                     console.error("Native open failed:", err);
-                 }
-             });
+             shell.openPath(pathString).catch(err => console.error(err));
              return; 
         }
-
         const cmd = `wsl --exec explorer.exe "${linuxPath}"`;
-        console.log("Executing WSL open:", cmd);
-        exec(cmd, (err) => {
-             if (err) console.error("Failed to open via WSL:", err);
-        });
+        exec(cmd, (err) => { if (err) console.error(err); });
     } else {
-        // Normal Windows Path
-        shell.openPath(pathString).then((error) => {
-            if (error) console.error('Failed to open path:', error);
-        });
+        shell.openPath(pathString).catch(error => console.error(error));
     }
+});
+
+// --- SECRETS API ---
+ipcMain.handle('save-secret', async (event, { repoId, passphrase }) => {
+    if (!safeStorage.isEncryptionAvailable()) return { success: false, error: "Encryption not available" };
+    try {
+        const buffer = safeStorage.encryptString(passphrase);
+        secretsCache[repoId] = buffer.toString('hex');
+        persistSecrets();
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('delete-secret', async (event, { repoId }) => {
+    if (secretsCache[repoId]) {
+        delete secretsCache[repoId];
+        persistSecrets();
+    }
+    return { success: true };
+});
+
+ipcMain.handle('has-secret', async (event, { repoId }) => {
+    return { hasSecret: !!secretsCache[repoId] };
 });
 
 // --- HELPER ---
 function getEnv(customEnv) {
-    return { 
-        ...process.env, 
-        ...customEnv 
-    };
+    return { ...process.env, ...customEnv };
 }
 
-// --- REAL BACKEND API HANDLERS ---
+// --- BORG EXECUTION ---
 
-ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, envVars, forceBinary, wslUser }) => {
+ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, envVars, forceBinary, wslUser, repoId }) => {
   return new Promise((resolve) => {
     let bin, finalArgs;
     const targetBinary = forceBinary || 'borg';
+    
+    // INJECT SECRET IF REPO ID PROVIDED
+    const vars = { ...envVars };
+    if (repoId) {
+        const secret = getDecryptedPassword(repoId);
+        if (secret) {
+            vars.BORG_PASSPHRASE = secret;
+            console.log(`[Security] Injected secure passphrase for Repo ${repoId}`);
+        }
+    }
 
     if (useWsl) {
         bin = 'wsl'; 
-        // Support running as specific user (e.g. root) for setup tasks
         if (wslUser) {
             finalArgs = ['-u', wslUser, '--exec', targetBinary, ...args];
         } else {
@@ -144,44 +227,28 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
     } else {
         bin = (targetBinary === 'borg') ? (executablePath || 'borg') : targetBinary;
         finalArgs = args;
-        
-        if ((bin.includes('\\') || bin.includes('/')) && !fs.existsSync(bin)) {
-            const errorMsg = `Error: Executable not found at ${bin}`;
-            if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: errorMsg });
-            return resolve({ success: false, error: errorMsg });
-        }
     }
 
-    console.log(`[Borg] Executing: ${bin} ${finalArgs.join(' ')}`);
+    // console.log(`[Borg] Executing: ${bin} ${finalArgs.join(' ')}`); // Disabled for privacy in prod logs
     
     try {
         const child = spawn(bin, finalArgs, {
-          env: getEnv(envVars),
+          env: getEnv(vars),
           shell: !useWsl 
         });
 
         activeProcesses.set(commandId, child);
 
         child.stdout.on('data', (data) => {
-          const text = data.toString();
-          console.log(`[Borg STDOUT] ${text.trim()}`);
-          if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: text });
+          if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: data.toString() });
         });
 
         child.stderr.on('data', (data) => {
           const text = data.toString();
-          console.error(`[Borg STDERR] ${text.trim()}`);
           if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: text });
-
-          const lower = text.toLowerCase();
-          if (lower.includes('not recognized') || lower.includes('falsch geschrieben') || lower.includes('not found')) {
-              const hint = `\n[WinBorg Hint] 🔴 Binary '${targetBinary}' not found!`;
-              if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: hint });
-          }
         });
 
         child.on('close', (code) => {
-          console.log(`[Borg] Process exited with code ${code}`);
           activeProcesses.delete(commandId);
           resolve({ success: code === 0, code });
         });
@@ -193,7 +260,6 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
         });
     } catch (e) {
         activeProcesses.delete(commandId);
-        if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: `Critical Error: ${e.message}` });
         resolve({ success: false, error: e.message });
     }
   });
@@ -211,65 +277,42 @@ ipcMain.handle('borg-stop', (event, { commandId }) => {
     });
 });
 
-ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, envVars }) => {
+ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, envVars, repoId }) => {
   return new Promise((resolve) => {
     let bin, finalArgs;
-    let fuseError = false;
     
+    // INJECT SECRET
+    const vars = { ...envVars };
+    if (repoId) {
+        const secret = getDecryptedPassword(repoId);
+        if (secret) vars.BORG_PASSPHRASE = secret;
+    }
+
     if (useWsl) {
         const mountPoint = args[args.length - 1]; 
         try {
-            console.log(`[Borg Mount] Creating directory and fixing permissions: ${mountPoint}`);
-            // Fix permissions: chmod 777 ensures the folder is accessible by "other" (Windows) before mounting
             require('child_process').execSync(`wsl --exec sh -c "mkdir -p '${mountPoint}' && chmod 777 '${mountPoint}'"`);
         } catch(e) { 
-            console.error(`[Borg Mount] Failed to create directory ${mountPoint}`, e.message);
-            if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: `FATAL ERROR: Failed to create/chmod mountpoint ${mountPoint}.` });
             return resolve({ success: false, error: "MKDIR_FAILED" });
         }
-
         bin = 'wsl';
         finalArgs = ['--exec', 'borg', ...args];
     } else {
         bin = executablePath || 'borg';
         finalArgs = args;
     }
-
-    console.log(`[Borg Mount] Starting mount: ${bin} ${finalArgs.join(' ')}`);
     
     try {
         const child = spawn(bin, finalArgs, {
-            env: getEnv(envVars),
+            env: getEnv(vars),
             shell: !useWsl
         });
 
         activeMounts.set(mountId, child);
 
-        child.stdout.on('data', (data) => {
-          if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: data.toString() });
-        });
-
         child.stderr.on('data', (data) => {
           const text = data.toString();
-          console.error(`[Mount Error] ${text}`);
           if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: text });
-          
-          if (text.includes('no FUSE support') || text.includes('fusermount3')) {
-              fuseError = true;
-              const hint = `\n[WinBorg Hint] 🔴 FUSE Missing or Incomplete!`;
-              if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: hint });
-          }
-
-          if (text.includes('user_allow_other')) {
-              fuseError = true;
-              const hint = `\n[WinBorg Hint] 🔴 'user_allow_other' missing. Attempting auto-fix failed.`;
-              if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: hint });
-          }
-          
-          if (text.includes('Mountpoint must be a writable directory')) {
-               const hint = `\n[WinBorg Hint] 🚫 Permission Error - Use a linux path like /mnt/wsl/...`;
-               if (mainWindow) mainWindow.webContents.send('terminal-log', { id: 'mount', text: hint });
-          }
         });
 
         child.on('close', (code) => {
@@ -281,10 +324,7 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
             if (activeMounts.has(mountId)) {
                 resolve({ success: true, pid: child.pid });
             } else {
-                resolve({ 
-                    success: false, 
-                    error: fuseError ? 'FUSE_MISSING' : 'PROCESS_EXITED' 
-                });
+                resolve({ success: false, error: 'PROCESS_EXITED' });
             }
         }, 2500);
     } catch (e) {
@@ -296,21 +336,10 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
 ipcMain.handle('borg-unmount', (event, { mountId, localPath, useWsl, executablePath }) => {
   return new Promise((resolve) => {
     if (activeMounts.has(mountId)) {
-        const child = activeMounts.get(mountId);
-        child.kill(); 
+        activeMounts.get(mountId).kill(); 
         activeMounts.delete(mountId);
     }
-
-    let cmd;
-    if (useWsl) {
-        cmd = `wsl --exec fusermount3 -u -z ${localPath}`;
-    } else {
-        const bin = executablePath || 'borg';
-        cmd = `"${bin}" umount ${localPath}`;
-    }
-
-    exec(cmd, (err) => {
-        resolve({ success: true });
-    });
+    const cmd = useWsl ? `wsl --exec fusermount3 -u -z ${localPath}` : `"${executablePath||'borg'}" umount ${localPath}`;
+    exec(cmd, () => resolve({ success: true }));
   });
 });

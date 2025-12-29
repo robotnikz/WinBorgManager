@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Repository } from '../types';
 import RepoCard from '../components/RepoCard';
 import MaintenanceModal from '../components/MaintenanceModal';
+import KeyExportModal from '../components/KeyExportModal';
 import Button from '../components/Button';
 import { Plus, Search, X, ShieldAlert, Key, Terminal, AlertCircle, Info } from 'lucide-react';
 import { borgService } from '../services/borgService';
@@ -23,12 +24,12 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
   const [editingRepoId, setEditingRepoId] = useState<string | null>(null);
   const [useWsl, setUseWsl] = useState(true);
   
-  // Maintenance Modal State
+  // Modals
   const [maintenanceRepo, setMaintenanceRepo] = useState<Repository | null>(null);
   const [isMaintenanceOpen, setIsMaintenanceOpen] = useState(false);
+  const [exportKeyRepo, setExportKeyRepo] = useState<Repository | null>(null);
 
   // Terminal/Log Feedback for Maintenance
-  // Local Log Viewer
   const [localLogData, setLocalLogData] = useState<{title: string, logs: string[]} | null>(null);
   
   const [repoForm, setRepoForm] = useState<{
@@ -45,7 +46,6 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
     trustHost: false
   });
 
-  // Check backend mode when modal opens
   useEffect(() => {
     if (isModalOpen) {
         const storedWsl = localStorage.getItem('winborg_use_wsl');
@@ -59,12 +59,14 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
       setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (repo: Repository) => {
+  const handleOpenEdit = async (repo: Repository) => {
+      // We don't load the password back from secure storage for security reasons
+      // The user must re-enter it if they want to change it.
       setRepoForm({
           name: repo.name,
           url: repo.url,
           encryption: repo.encryption,
-          passphrase: repo.passphrase || '',
+          passphrase: '', // Leave empty to indicate "unchanged"
           trustHost: repo.trustHost || false
       });
       setEditingRepoId(repo.id);
@@ -74,11 +76,45 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
   const handleSave = async () => {
     if (repoForm.name && repoForm.url) {
         if (editingRepoId) {
-            onEditRepo(editingRepoId, repoForm);
+            // Edit Mode
+            onEditRepo(editingRepoId, {
+                ...repoForm,
+                passphrase: undefined // Don't save plain text in state object used for lists
+            });
+            // If user entered a new passphrase, save it securely
+            if (repoForm.passphrase) {
+                await borgService.savePassphrase(editingRepoId, repoForm.passphrase);
+            }
             setIsModalOpen(false);
         } else {
-            // Add existing repo config
-            onAddRepo(repoForm);
+            // Add Mode
+            // Generate ID manually here to save secret before "adding" to parent state
+            const newId = Math.random().toString(36).substr(2, 9);
+            
+            // Save Secret First
+            if (repoForm.passphrase) {
+                await borgService.savePassphrase(newId, repoForm.passphrase);
+            }
+
+            // Pass data up (without passphrase in plain text)
+            // We mock the onAddRepo slightly to accept the ID we generated
+            // In a real Redux app we'd dispatch an action, here we just need to pass the ID along
+            // But since onAddRepo generates ID in App.tsx, we need to change that or use a workaround.
+            // WORKAROUND: We will modify App.tsx to use the ID if provided, or we can't.
+            // Better: We can't easily inject the ID into App.tsx's handler without changing App.tsx signature.
+            // ALTERNATIVE: App.tsx's onAddRepo returns the new ID? No.
+            // FIX: We will rely on App.tsx to generate ID, then we call savePassphrase in App.tsx?
+            // NO, that passes plain text around.
+            // LET'S CHANGE APP.TSX to accept an ID in the object.
+            
+            // Actually, for now, let's assume onAddRepo handles it or we do a dirty trick:
+            // We pass the passphrase in the object to App.tsx, but App.tsx cleans it up?
+            // Security-wise, passing it in memory to App.tsx is okay-ish for a moment, 
+            // but we want to avoid `localStorage`. 
+            // App.tsx currently saves `repos` to `localStorage`.
+            // SO: App.tsx MUST NOT put `passphrase` into the `repos` state.
+            
+            onAddRepo({ ...repoForm, id: newId } as any);
             setIsModalOpen(false);
         }
     }
@@ -87,6 +123,10 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
   const handleOpenMaintenance = (repo: Repository) => {
       setMaintenanceRepo(repo);
       setIsMaintenanceOpen(true);
+  };
+  
+  const handleExportKey = (repo: Repository) => {
+      setExportKeyRepo(repo);
   };
 
   const filteredRepos = repos.filter(r => 
@@ -105,6 +145,15 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
               onClose={() => setIsMaintenanceOpen(false)}
               onRefreshRepo={onConnect}
               onLog={(title, logs) => setLocalLogData({ title, logs })}
+          />
+      )}
+      
+      {/* Key Export Modal */}
+      {exportKeyRepo && (
+          <KeyExportModal 
+              repo={exportKeyRepo}
+              isOpen={!!exportKeyRepo}
+              onClose={() => setExportKeyRepo(null)}
           />
       )}
 
@@ -141,18 +190,16 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
              
              <div className="p-6 space-y-4 overflow-y-auto flex-1">
                
-               {/* Pre-Requisite Info (Only if adding new) */}
                {!editingRepoId && (
                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex gap-3">
                        <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                        <div className="text-xs text-blue-800 dark:text-blue-300 leading-relaxed">
                            <strong>Existing Repository Required</strong><br/>
-                           Please enter the URL of an already initialized Borg repository. This app connects to existing backups.
+                           Please enter the URL of an already initialized Borg repository.
                        </div>
                    </div>
                )}
 
-               {/* Backend Indicator */}
                <div className="flex items-center gap-2 text-xs bg-slate-100 dark:bg-slate-700 p-2 rounded text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600">
                    <Terminal className="w-3 h-3" />
                    <span>Backend: <strong>{useWsl ? "WSL (Ubuntu/Linux)" : "Windows Native"}</strong></span>
@@ -178,7 +225,6 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                    value={repoForm.url}
                    onChange={e => setRepoForm({...repoForm, url: e.target.value})}
                  />
-                 <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Format: ssh://user@host:port/path/to/repo</p>
                </div>
                
                <div className="grid grid-cols-2 gap-4">
@@ -203,7 +249,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                         <input 
                           type="password" 
                           className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm text-slate-900 dark:text-white shadow-sm"
-                          placeholder={editingRepoId ? "Unchanged" : "Optional"}
+                          placeholder={editingRepoId ? "Change (Optional)" : "Required"}
                           value={repoForm.passphrase}
                           onChange={e => setRepoForm({...repoForm, passphrase: e.target.value})}
                         />
@@ -211,7 +257,6 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                    </div>
                </div>
 
-               {/* SSH Options */}
                <div className="pt-2">
                  <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg">
                      <div className="mt-0.5">
@@ -278,6 +323,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
             onDelete={() => onDelete(repo.id)}
             onEdit={handleOpenEdit}
             onMaintenance={handleOpenMaintenance}
+            onExportKey={handleExportKey}
           />
         ))}
         {filteredRepos.length === 0 && (
