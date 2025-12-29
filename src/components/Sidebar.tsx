@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { HardDrive, Server, Settings, LayoutDashboard, Database, Activity, Github, Code2, Heart } from 'lucide-react';
 import { View } from '../types';
@@ -21,7 +22,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) => {
   const devProfile = {
       name: "robotnikz",
       role: "Developer",
-      repo: "robotnikz/WinBorg",
+      repo: "robotnikz/WinBorgManager",
       version: "v0.1.0"
   };
 

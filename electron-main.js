@@ -11,7 +11,7 @@ const os = require('os');
 
 // --- CONFIGURATION ---
 // CHANGE THIS TO YOUR REPO: user/repo
-const GITHUB_REPO = "robotnikz/WinBorg"; 
+const GITHUB_REPO = "robotnikz/WinBorgManager"; 
 
 let mainWindow;
 let tray = null;
@@ -565,7 +565,6 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
     const targetBinary = forceBinary || 'borg';
     
     // INJECT SECRET IF REPO ID PROVIDED
-    // Use a copy of envVars to avoid mutating original IPC object unexpectedly
     const vars = { ...envVars };
     if (repoId) {
         const secret = getDecryptedPassword(repoId);
@@ -578,33 +577,61 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
     if (useWsl) {
         bin = 'wsl'; 
         
-        // WSL ENV MERGING FIX
-        // Get WSLENV from frontend (which contains BORG_DELETE_... etc)
-        let wslEnvParts = vars.WSLENV ? vars.WSLENV.split(':') : [];
+        // --- IMPROVED ENV VAR HANDLING FOR WSL ---
+        // Some Borg commands (like destroy/delete repo) rely on environment variables (BORG_DELETE_I_KNOW_...)
+        // WSLENV can sometimes fail to propagate these correctly depending on Windows version/config.
+        // We will explicitly inject critical variables into the command string using 'sh -c'.
         
-        // Merge with System WSLENV (if any)
-        if (process.env.WSLENV) {
-            wslEnvParts = [...process.env.WSLENV.split(':'), ...wslEnvParts];
-        }
+        const criticalVars = [
+            'BORG_DELETE_I_KNOW_WHAT_I_AM_DOING',
+            'BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK',
+            'BORG_RELOCATED_REPO_ACCESS_IS_OK'
+        ];
         
-        // Ensure standard keys are always present
-        if (!wslEnvParts.includes('BORG_PASSPHRASE')) wslEnvParts.push('BORG_PASSPHRASE');
-        if (!wslEnvParts.includes('BORG_RSH')) wslEnvParts.push('BORG_RSH');
-        
-        // Deduplicate
-        const uniqueParts = [...new Set(wslEnvParts)];
-        vars.WSLENV = uniqueParts.join(':');
-
-        if (cwd) {
-            let wslCwd = cwd;
-            if (/^[a-zA-Z]:/.test(cwd)) {
-                const drive = cwd.charAt(0).toLowerCase();
-                const pathPart = cwd.slice(2).replace(/\\/g, '/');
-                wslCwd = `/mnt/${drive}${pathPart}`;
+        let inlineEnvStr = '';
+        criticalVars.forEach(key => {
+            if (vars[key]) {
+                inlineEnvStr += `export ${key}='${vars[key]}'; `;
             }
-            const cmdString = `cd "${wslCwd}" && ${targetBinary} ${args.map(a => `"${a}"`).join(' ')}`;
-            finalArgs = wslUser ? ['-u', wslUser, '--exec', 'sh', '-c', cmdString] : ['--exec', 'sh', '-c', cmdString];
+        });
+
+        // Always use sh -c if we have inline vars OR a cwd, to ensure the shell environment is correct.
+        if (cwd || inlineEnvStr.length > 0) {
+            let cmdParts = [];
+            
+            if (cwd) {
+                let wslCwd = cwd;
+                if (/^[a-zA-Z]:/.test(cwd)) {
+                    const drive = cwd.charAt(0).toLowerCase();
+                    const pathPart = cwd.slice(2).replace(/\\/g, '/');
+                    wslCwd = `/mnt/${drive}${pathPart}`;
+                }
+                cmdParts.push(`cd "${wslCwd}"`);
+            }
+            
+            // Basic escaping for args in shell string
+            const safeArgs = args.map(a => `"${a.replace(/(["'$`\\])/g,'\\$1')}"`).join(' ');
+            
+            // Compose: export VAR=val; borg args...
+            cmdParts.push(`${inlineEnvStr}${targetBinary} ${safeArgs}`);
+            
+            const fullCmd = cmdParts.join(' && ');
+            finalArgs = wslUser ? ['-u', wslUser, '--exec', 'sh', '-c', fullCmd] : ['--exec', 'sh', '-c', fullCmd];
         } else {
+            // Standard execution relying on WSLENV for basic things like BORG_PASSPHRASE
+            // We still need to set up WSLENV for non-inlined vars (like Passphrase)
+            
+            let wslEnvParts = vars.WSLENV ? vars.WSLENV.split(':') : [];
+            if (process.env.WSLENV) {
+                wslEnvParts = [...process.env.WSLENV.split(':'), ...wslEnvParts];
+            }
+            
+            if (!wslEnvParts.includes('BORG_PASSPHRASE')) wslEnvParts.push('BORG_PASSPHRASE');
+            if (!wslEnvParts.includes('BORG_RSH')) wslEnvParts.push('BORG_RSH');
+            
+            const uniqueParts = [...new Set(wslEnvParts)];
+            vars.WSLENV = uniqueParts.join(':');
+            
             if (wslUser) {
                 finalArgs = ['-u', wslUser, '--exec', targetBinary, ...args];
             } else {
@@ -624,7 +651,7 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
         });
 
         activeProcesses.set(commandId, child);
-        updatePowerBlocker(); // Update blocker state
+        updatePowerBlocker();
 
         child.stdout.on('data', (data) => {
           if (mainWindow) mainWindow.webContents.send('terminal-log', { id: commandId, text: data.toString() });
@@ -637,7 +664,7 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
 
         child.on('close', (code) => {
           activeProcesses.delete(commandId);
-          updatePowerBlocker(); // Update blocker state
+          updatePowerBlocker();
           resolve({ success: code === 0, code });
         });
 
@@ -687,7 +714,6 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
         bin = 'wsl';
         finalArgs = ['--exec', 'borg', ...args];
         
-        // MOUNT also needs WSLENV handling if custom envs are used (rare, but good practice)
         let wslEnvParts = vars.WSLENV ? vars.WSLENV.split(':') : [];
         if (process.env.WSLENV) wslEnvParts = [...process.env.WSLENV.split(':'), ...wslEnvParts];
         if (!wslEnvParts.includes('BORG_PASSPHRASE')) wslEnvParts.push('BORG_PASSPHRASE');
