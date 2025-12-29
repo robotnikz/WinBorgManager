@@ -19,7 +19,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) => {
 
   // Developer Config
   const devProfile = {
-      name: "Tobia",
+      name: "robotnikz",
       role: "Developer",
       repo: "robotnikz/WinBorg"
   };
