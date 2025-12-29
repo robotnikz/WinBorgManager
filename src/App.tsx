@@ -376,7 +376,11 @@ const App: React.FC = () => {
   };
 
   const handleConnect = (repo: Repository) => {
-    setRepos(prev => prev.map(r => r.id === repo.id ? { ...r, status: 'connecting' } : r));
+    // DISCONNECT OTHERS: Set all to disconnected except current
+    setRepos(prev => prev.map(r => ({
+        ...r,
+        status: r.id === repo.id ? 'connecting' : 'disconnected'
+    })));
 
     runCommand(
         `Connecting to ${repo.name}`, 
@@ -403,13 +407,14 @@ const App: React.FC = () => {
                     setTimeout(() => handleFetchArchiveStats(repo, newArchives[0].name), 500);
                 }
 
+                // SUCCESS: Set this one connected, ensure others disconnected
                 setRepos(prev => prev.map(r => 
-                r.id === repo.id ? { 
-                    ...r, 
-                    status: 'connected', 
-                    lastBackup: newArchives[0]?.time || 'Never',
-                    fileCount: newArchives.length 
-                } : r
+                    r.id === repo.id ? { 
+                        ...r, 
+                        status: 'connected', 
+                        lastBackup: newArchives[0]?.time || 'Never',
+                        fileCount: newArchives.length 
+                    } : { ...r, status: 'disconnected' }
                 ));
 
                 setTimeout(() => {
