@@ -443,7 +443,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Repositories</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Manage your remote Borg repositories</p>
         </div>
-        <Button onClick={handleOpenAdd}>
+        <Button onClick={handleOpenAdd} title="Configure a new Borg repository">
           <Plus className="w-4 h-4 mr-2" />
           Add Repository
         </Button>
