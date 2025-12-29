@@ -3,7 +3,6 @@ import { Repository } from '../types';
 import RepoCard from '../components/RepoCard';
 import MaintenanceModal from '../components/MaintenanceModal';
 import KeyExportModal from '../components/KeyExportModal';
-import CreateBackupModal from '../components/CreateBackupModal';
 import Button from '../components/Button';
 import { Plus, Search, X, ShieldAlert, Key, Terminal, AlertCircle, Info } from 'lucide-react';
 import { borgService } from '../services/borgService';
@@ -29,8 +28,6 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
   const [maintenanceRepo, setMaintenanceRepo] = useState<Repository | null>(null);
   const [isMaintenanceOpen, setIsMaintenanceOpen] = useState(false);
   const [exportKeyRepo, setExportKeyRepo] = useState<Repository | null>(null);
-  
-  const [createBackupRepo, setCreateBackupRepo] = useState<Repository | null>(null);
 
   // Terminal/Log Feedback for Maintenance
   const [localLogData, setLocalLogData] = useState<{title: string, logs: string[]} | null>(null);
@@ -105,10 +102,6 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
       setExportKeyRepo(repo);
   };
 
-  const handleCreateBackup = (repo: Repository) => {
-      setCreateBackupRepo(repo);
-  };
-
   const filteredRepos = repos.filter(r => 
     r.name.toLowerCase().includes(search.toLowerCase()) || 
     r.url.toLowerCase().includes(search.toLowerCase())
@@ -125,17 +118,6 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
               onClose={() => setIsMaintenanceOpen(false)}
               onRefreshRepo={onConnect}
               onLog={(title, logs) => setLocalLogData({ title, logs })}
-          />
-      )}
-      
-      {/* Create Backup Modal */}
-      {createBackupRepo && (
-          <CreateBackupModal
-             repo={createBackupRepo}
-             isOpen={!!createBackupRepo}
-             onClose={() => setCreateBackupRepo(null)}
-             onRefreshRepo={onConnect}
-             onLog={(title, logs) => setLocalLogData({ title, logs })}
           />
       )}
       
@@ -315,7 +297,6 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
             onEdit={handleOpenEdit}
             onMaintenance={handleOpenMaintenance}
             onExportKey={handleExportKey}
-            onCreateBackup={handleCreateBackup}
           />
         ))}
         {filteredRepos.length === 0 && (

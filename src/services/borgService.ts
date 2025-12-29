@@ -1,4 +1,5 @@
 
+
 // This service communicates with the Electron Main process
 
 import { formatBytes, formatDuration } from '../utils/formatters';
@@ -99,35 +100,8 @@ const parseBorgUrl = (url: string) => {
     return { isSsh: false, path: url };
 };
 
-// Helper: Convert Windows Path to WSL Path
-// C:\Users\Foo -> /mnt/c/Users/Foo
-const convertWindowsPathToWsl = (winPath: string): string => {
-    if (!winPath) return '';
-    // Check if already unix style
-    if (winPath.startsWith('/')) return winPath;
-
-    let wslPath = winPath.replace(/\\/g, '/');
-    const driveMatch = wslPath.match(/^([a-zA-Z]):/);
-    
-    if (driveMatch) {
-        const driveLetter = driveMatch[1].toLowerCase();
-        wslPath = wslPath.replace(/^([a-zA-Z]):/, `/mnt/${driveLetter}`);
-    }
-    return wslPath;
-};
-
 export const borgService = {
   
-  // --- NATIVE DIALOGS ---
-  selectDirectory: async (): Promise<string[]> => {
-      return await ipcRenderer.invoke('dialog:open-directory');
-  },
-
-  // --- NOTIFICATIONS ---
-  notify: (title: string, body: string) => {
-      ipcRenderer.send('notify', { title, body });
-  },
-
   // --- SECRETS MANAGEMENT ---
   savePassphrase: async (repoId: string, passphrase: string) => {
       return await ipcRenderer.invoke('save-secret', { repoId, passphrase });
@@ -176,22 +150,6 @@ export const borgService = {
     } finally {
       ipcRenderer.removeListener('terminal-log', logListener);
     }
-  },
-
-  createArchive: async (
-      repoUrl: string,
-      archiveName: string,
-      sourcePaths: string[],
-      onLog: (text: string) => void,
-      overrides?: { repoId?: string, disableHostCheck?: boolean }
-  ): Promise<boolean> => {
-      const config = getBorgConfig();
-      // Map Paths
-      const finalPaths = config.useWsl ? sourcePaths.map(convertWindowsPathToWsl) : sourcePaths;
-      
-      const args = ['create', '--verbose', '--stats', '--progress', '--compression', 'lz4', `${repoUrl}::${archiveName}`, ...finalPaths];
-      
-      return await borgService.runCommand(args, onLog, overrides);
   },
 
   compact: async (repoUrl: string, onLog: (text: string) => void, overrides?: { repoId?: string, disableHostCheck?: boolean }) => {
@@ -394,5 +352,58 @@ export const borgService = {
         useWsl: config.useWsl,
         executablePath: config.path 
     });
+  },
+
+  selectDirectory: async (): Promise<string[] | null> => {
+      try {
+        const result = await ipcRenderer.invoke('select-directory');
+        return !result.canceled ? result.filePaths : null;
+      } catch (e) {
+          console.error("Failed to select directory", e);
+          return null;
+      }
+  },
+
+  createArchive: async (
+      repoUrl: string, 
+      archiveName: string, 
+      sourcePaths: string[], 
+      onLog: (text: string) => void,
+      overrides?: { repoId?: string, disableHostCheck?: boolean }
+  ): Promise<boolean> => {
+      const config = getBorgConfig();
+      
+      // Convert paths for WSL if needed
+      let paths = sourcePaths;
+      if (config.useWsl) {
+          paths = sourcePaths.map(p => {
+              // Convert C:\Path to /mnt/c/Path
+              if (/^[a-zA-Z]:[\\/]/.test(p)) {
+                  const drive = p.charAt(0).toLowerCase();
+                  const rest = p.slice(3).replace(/\\/g, '/');
+                  return `/mnt/${drive}/${rest}`;
+              }
+              return p.replace(/\\/g, '/');
+          });
+      }
+
+      // Create command: borg create --progress --stats REPO::ARCHIVE PATHS...
+      const args = ['create', '--progress', '--stats', `${repoUrl}::${archiveName}`, ...paths];
+      
+      return await borgService.runCommand(args, onLog, overrides);
+  },
+
+  notify: (title: string, body: string) => {
+      if (!('Notification' in window)) return;
+      
+      if (Notification.permission === 'granted') {
+          new Notification(title, { body });
+      } else if (Notification.permission !== 'denied') {
+          Notification.requestPermission().then(permission => {
+              if (permission === 'granted') {
+                  new Notification(title, { body });
+              }
+          });
+      }
   }
 };

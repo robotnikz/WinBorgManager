@@ -1,6 +1,6 @@
 import React from 'react';
 import { Repository } from '../types';
-import { Server, Shield, Clock, HardDrive, Trash2, Loader2, Edit2, ShieldCheck, Unlock, Lock, Wrench, Key, CloudUpload } from 'lucide-react';
+import { Server, Shield, Clock, HardDrive, Trash2, Loader2, Edit2, ShieldCheck, Unlock, Lock, Wrench, Key } from 'lucide-react';
 
 interface RepoCardProps {
   repo: Repository;
@@ -12,10 +12,9 @@ interface RepoCardProps {
   onBreakLock?: (repo: Repository) => void;
   onMaintenance?: (repo: Repository) => void;
   onExportKey?: (repo: Repository) => void;
-  onCreateBackup?: (repo: Repository) => void;
 }
 
-const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete, onEdit, onCheck, onBreakLock, onMaintenance, onExportKey, onCreateBackup }) => {
+const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete, onEdit, onCheck, onBreakLock, onMaintenance, onExportKey }) => {
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200/75 dark:border-slate-700 p-5 shadow-sm hover:shadow-md transition-all duration-200 group relative overflow-hidden flex flex-col h-full">
       
@@ -65,16 +64,6 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
 
             {/* Actions Section */}
             <div className="flex items-center gap-0.5">
-                {onCreateBackup && repo.status === 'connected' && (
-                     <button 
-                        onClick={() => onCreateBackup(repo)}
-                        className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-green-600 dark:hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-md transition-all"
-                        title="Create New Backup"
-                    >
-                        <CloudUpload className="w-3.5 h-3.5" />
-                    </button>
-                )}
-
                 {onMaintenance && repo.status === 'connected' && (
                     <button 
                         onClick={() => onMaintenance(repo)}

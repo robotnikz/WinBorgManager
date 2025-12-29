@@ -3,7 +3,7 @@
  * REAL BACKEND FOR WINBORG
  */
 
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, safeStorage, nativeImage, Notification, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, safeStorage, nativeImage, dialog } = require('electron');
 const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -147,22 +147,6 @@ ipcMain.on('window-close', () => {
     if (mainWindow) mainWindow.close(); 
 });
 
-// --- DIALOGS & NOTIFICATIONS ---
-ipcMain.handle('dialog:open-directory', async () => {
-  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openDirectory', 'multiSelections']
-  });
-  if (canceled) {
-    return [];
-  } else {
-    return filePaths;
-  }
-});
-
-ipcMain.on('notify', (event, { title, body }) => {
-    new Notification({ title, body, icon: path.join(__dirname, 'public/icon.png') }).show();
-});
-
 // --- TASKBAR PROGRESS ---
 ipcMain.on('set-progress', (event, progress) => {
     // progress should be 0 to 1, or -1 to remove
@@ -184,6 +168,14 @@ ipcMain.on('open-path', (event, pathString) => {
     } else {
         shell.openPath(pathString).catch(error => console.error(error));
     }
+});
+
+ipcMain.handle('select-directory', async (event) => {
+    if (!mainWindow) return { canceled: true, filePaths: [] };
+    const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ['openDirectory', 'multiSelections']
+    });
+    return result;
 });
 
 // --- SECRETS API ---
