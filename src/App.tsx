@@ -10,7 +10,6 @@ import ArchivesView from './views/ArchivesView';
 import TerminalModal from './components/TerminalModal';
 import FuseSetupModal from './components/FuseSetupModal';
 import { View, Repository, MountPoint, Archive, ActivityLogEntry } from './types';
-import { MOCK_REPOS } from './constants';
 import { borgService } from './services/borgService';
 import { formatDate } from './utils/formatters';
 
@@ -70,7 +69,7 @@ const App: React.FC = () => {
         return [];
     } else {
         localStorage.setItem('winborg_initialized', 'true');
-        return []; // No mock repos by default to avoid confusion with real security
+        return [];
     }
   });
 
