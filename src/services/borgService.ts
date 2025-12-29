@@ -137,6 +137,49 @@ export const borgService = {
   },
 
   /**
+   * Initialize a NEW repository
+   */
+  init: async (
+      repoUrl: string, 
+      encryption: 'repokey' | 'keyfile' | 'none', 
+      onLog: (text: string) => void,
+      overrides?: { passphrase?: string, disableHostCheck?: boolean }
+  ): Promise<boolean> => {
+      const args = ['init', '--encryption', encryption, repoUrl];
+      return await borgService.runCommand(args, onLog, overrides);
+  },
+
+  /**
+   * Compact a repository (Free space)
+   */
+  compact: async (
+      repoUrl: string,
+      onLog: (text: string) => void,
+      overrides?: { passphrase?: string, disableHostCheck?: boolean }
+  ): Promise<boolean> => {
+      return await borgService.runCommand(['compact', '-v', repoUrl], onLog, overrides);
+  },
+
+  /**
+   * Prune a repository (Delete old archives)
+   */
+  prune: async (
+      repoUrl: string,
+      rules: { daily?: number, weekly?: number, monthly?: number, keepWithin?: string },
+      onLog: (text: string) => void,
+      overrides?: { passphrase?: string, disableHostCheck?: boolean }
+  ): Promise<boolean> => {
+      const args = ['prune', '-v', '--list', repoUrl];
+      
+      if (rules.keepWithin) args.push('--keep-within', rules.keepWithin);
+      if (rules.daily) args.push('--keep-daily', rules.daily.toString());
+      if (rules.weekly) args.push('--keep-weekly', rules.weekly.toString());
+      if (rules.monthly) args.push('--keep-monthly', rules.monthly.toString());
+
+      return await borgService.runCommand(args, onLog, overrides);
+  },
+
+  /**
    * AUTOMATED FIX for WSL FUSE permissions.
    * Runs as WSL ROOT (passwordless usually) to:
    * 1. Add 'user_allow_other' to /etc/fuse.conf if missing OR uncomment it

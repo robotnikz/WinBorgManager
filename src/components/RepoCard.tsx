@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { Repository } from '../types';
-import { Server, Shield, Clock, HardDrive, Trash2, Loader2, Edit2, ShieldCheck, Unlock, Lock } from 'lucide-react';
+import { Server, Shield, Clock, HardDrive, Trash2, Loader2, Edit2, ShieldCheck, Unlock, Lock, Wrench } from 'lucide-react';
 
 interface RepoCardProps {
   repo: Repository;
@@ -11,9 +10,10 @@ interface RepoCardProps {
   onEdit?: (repo: Repository) => void;
   onCheck?: (repo: Repository) => void;
   onBreakLock?: (repo: Repository) => void;
+  onMaintenance?: (repo: Repository) => void;
 }
 
-const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete, onEdit, onCheck, onBreakLock }) => {
+const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete, onEdit, onCheck, onBreakLock, onMaintenance }) => {
   return (
     <div className="bg-white rounded-xl border border-gray-200/75 p-5 shadow-sm hover:shadow-md transition-all duration-200 group relative overflow-hidden">
       
@@ -65,6 +65,16 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
 
             {/* Actions Section */}
             <div className="flex items-center gap-0.5">
+                {onMaintenance && repo.status === 'connected' && (
+                    <button 
+                        onClick={() => onMaintenance(repo)}
+                        className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-all"
+                        title="Maintenance (Prune/Compact)"
+                    >
+                        <Wrench className="w-3.5 h-3.5" />
+                    </button>
+                )}
+
                 {onEdit && (
                     <button 
                         onClick={() => onEdit(repo)}

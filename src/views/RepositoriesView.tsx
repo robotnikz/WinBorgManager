@@ -1,9 +1,10 @@
-
 import React, { useState, useEffect } from 'react';
 import { Repository } from '../types';
 import RepoCard from '../components/RepoCard';
+import MaintenanceModal from '../components/MaintenanceModal';
 import Button from '../components/Button';
-import { Plus, Search, X, ShieldAlert, Key, Terminal, AlertCircle } from 'lucide-react';
+import { Plus, Search, X, ShieldAlert, Key, Terminal, AlertCircle, FilePlus } from 'lucide-react';
+import { borgService } from '../services/borgService';
 
 interface RepositoriesViewProps {
   repos: Repository[];
@@ -22,19 +23,44 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
   const [editingRepoId, setEditingRepoId] = useState<string | null>(null);
   const [useWsl, setUseWsl] = useState(true);
   
+  // Maintenance Modal State
+  const [maintenanceRepo, setMaintenanceRepo] = useState<Repository | null>(null);
+  const [isMaintenanceOpen, setIsMaintenanceOpen] = useState(false);
+
+  // Terminal/Log Feedback for Maintenance
+  const [tempTitle, setTempTitle] = useState('');
+  const [tempLogs, setTempLogs] = useState<string[]>([]);
+  const [showTempTerm, setShowTempTerm] = useState(false);
+  // We reuse the parent app's terminal modal roughly by passing props, 
+  // but since TerminalModal is at App level, we need a way to invoke it.
+  // Ideally App.tsx handles this. For now, let's just trigger a connect refresh.
+  // FIX: We need to pass a callback up to show logs, or implement a local simple modal.
+  // Actually, let's reuse the pattern: Triggering Connect refreshes data. 
+  // For logs, we can use a small local state to show a "Result" modal if needed, 
+  // OR we rely on the App.tsx global terminal.
+  // Let's assume the user wants to see the output.
+  // *Hack for this architecture*: We will reuse the `onConnect` to refresh, 
+  // but for displaying logs we will use a local TerminalModal copy or pass it up.
+  // Given constraints, I will add a local simple Log Viewer for maintenance results.
+  
   const [repoForm, setRepoForm] = useState<{
     name: string;
     url: string;
     encryption: 'repokey' | 'keyfile' | 'none';
     passphrase?: string;
     trustHost: boolean;
+    initialize: boolean; // NEW: Init flag
   }>({
     name: '',
     url: '',
     encryption: 'repokey',
     passphrase: '',
-    trustHost: false
+    trustHost: false,
+    initialize: false
   });
+
+  const [initProcessing, setInitProcessing] = useState(false);
+  const [initLogs, setInitLogs] = useState<string[]>([]);
 
   // Check backend mode when modal opens
   useEffect(() => {
@@ -45,9 +71,10 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
   }, [isModalOpen]);
 
   const handleOpenAdd = () => {
-      setRepoForm({ name: '', url: '', encryption: 'repokey', passphrase: '', trustHost: false });
+      setRepoForm({ name: '', url: '', encryption: 'repokey', passphrase: '', trustHost: false, initialize: false });
       setEditingRepoId(null);
       setIsModalOpen(true);
+      setInitLogs([]);
   };
 
   const handleOpenEdit = (repo: Repository) => {
@@ -56,22 +83,57 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
           url: repo.url,
           encryption: repo.encryption,
           passphrase: repo.passphrase || '',
-          trustHost: repo.trustHost || false
+          trustHost: repo.trustHost || false,
+          initialize: false
       });
       setEditingRepoId(repo.id);
       setIsModalOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (repoForm.name && repoForm.url) {
         if (editingRepoId) {
             onEditRepo(editingRepoId, repoForm);
+            setIsModalOpen(false);
         } else {
-            onAddRepo(repoForm);
+            // New Repo Logic
+            if (repoForm.initialize) {
+                // RUN BORG INIT
+                setInitProcessing(true);
+                setInitLogs(['Starting initialization...']);
+                
+                const success = await borgService.init(
+                    repoForm.url,
+                    repoForm.encryption,
+                    (log) => setInitLogs(prev => [...prev, log]),
+                    { passphrase: repoForm.passphrase, disableHostCheck: repoForm.trustHost }
+                );
+
+                setInitProcessing(false);
+                if (success) {
+                    // If successful, add to list and close
+                    onAddRepo(repoForm);
+                    setIsModalOpen(false);
+                } else {
+                    // Stay open to show error logs
+                    setInitLogs(prev => [...prev, "❌ Initialization Failed. See logs above."]);
+                }
+            } else {
+                // Just add config
+                onAddRepo(repoForm);
+                setIsModalOpen(false);
+            }
         }
-        setIsModalOpen(false);
     }
   };
+
+  const handleOpenMaintenance = (repo: Repository) => {
+      setMaintenanceRepo(repo);
+      setIsMaintenanceOpen(true);
+  };
+
+  // Local Log Viewer
+  const [localLogData, setLocalLogData] = useState<{title: string, logs: string[]} | null>(null);
 
   const filteredRepos = repos.filter(r => 
     r.name.toLowerCase().includes(search.toLowerCase()) || 
@@ -80,26 +142,70 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
-      {/* Modal Overlay */}
+      
+      {/* Maintenance Modal */}
+      {maintenanceRepo && (
+          <MaintenanceModal 
+              repo={maintenanceRepo}
+              isOpen={isMaintenanceOpen}
+              onClose={() => setIsMaintenanceOpen(false)}
+              onRefreshRepo={onConnect}
+              onLog={(title, logs) => setLocalLogData({ title, logs })}
+          />
+      )}
+
+      {/* Local Log Modal (Simple) */}
+      {localLogData && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+              <div className="bg-[#1e1e1e] w-full max-w-2xl rounded-lg shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+                  <div className="px-4 py-2 bg-[#2d2d2d] border-b border-black/20 flex justify-between items-center text-gray-300">
+                      <span className="font-mono text-sm">{localLogData.title}</span>
+                      <button onClick={() => setLocalLogData(null)}><X className="w-4 h-4" /></button>
+                  </div>
+                  <div className="p-4 overflow-y-auto flex-1 font-mono text-xs space-y-1">
+                      {localLogData.logs.map((l, i) => (
+                          <div key={i} className="text-gray-300 break-all">{l}</div>
+                      ))}
+                  </div>
+                  <div className="p-3 bg-[#2d2d2d] flex justify-end">
+                      <Button size="sm" onClick={() => setLocalLogData(null)}>Close</Button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Add/Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[2px] p-4 animate-in fade-in duration-200">
-           <div className="bg-white rounded-xl shadow-2xl border border-gray-100 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 ring-1 ring-black/5">
-             <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/80">
+           <div className="bg-white rounded-xl shadow-2xl border border-gray-100 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 ring-1 ring-black/5 flex flex-col max-h-[90vh]">
+             <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/80 shrink-0">
                <h3 className="font-semibold text-slate-800">{editingRepoId ? 'Edit Repository' : 'Add New Repository'}</h3>
-               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+               <button onClick={() => setIsModalOpen(false)} disabled={initProcessing} className="text-slate-400 hover:text-slate-600 transition-colors">
                  <X size={18} />
                </button>
              </div>
              
-             <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+             <div className="p-6 space-y-4 overflow-y-auto flex-1">
                
-               {/* Pre-Requisite Warning */}
+               {/* INIT TOGGLE (Only for New Repos) */}
                {!editingRepoId && (
-                   <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-3">
-                       <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                       <div className="text-xs text-amber-800 leading-relaxed">
-                           <span className="font-bold block mb-0.5 text-amber-900">Existing Repository Required</span>
-                           The repository must already exist on the server (initialized via <code>borg init</code>). This form only creates a connection profile.
+                   <div className={`border rounded-lg p-3 flex gap-3 transition-colors cursor-pointer ${repoForm.initialize ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200 hover:border-blue-200'}`} onClick={() => setRepoForm({...repoForm, initialize: !repoForm.initialize})}>
+                       <div className={`mt-0.5 w-5 h-5 rounded border flex items-center justify-center ${repoForm.initialize ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-300'}`}>
+                           {repoForm.initialize && <FilePlus className="w-3 h-3" />}
+                       </div>
+                       <div className="flex-1">
+                           <span className="font-bold text-sm text-slate-800 block">Initialize new repository</span>
+                           <span className="text-xs text-slate-500">Run <code>borg init</code> to create the repo structure on the server.</span>
+                       </div>
+                   </div>
+               )}
+
+               {/* Pre-Requisite Warning (Only if NOT initializing) */}
+               {!editingRepoId && !repoForm.initialize && (
+                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex gap-3">
+                       <AlertCircle className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
+                       <div className="text-xs text-slate-600 leading-relaxed">
+                           Assuming repository already exists. If not, check "Initialize" above.
                        </div>
                    </div>
                )}
@@ -108,17 +214,6 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                <div className="flex items-center gap-2 text-xs bg-slate-100 p-2 rounded text-slate-600 border border-slate-200">
                    <Terminal className="w-3 h-3" />
                    <span>Backend: <strong>{useWsl ? "WSL (Ubuntu/Linux)" : "Windows Native"}</strong></span>
-                   <button 
-                    onClick={() => {
-                        // Allow quick toggle for troubleshooting
-                        const newVal = !useWsl;
-                        setUseWsl(newVal);
-                        localStorage.setItem('winborg_use_wsl', String(newVal));
-                    }}
-                    className="ml-auto text-blue-600 hover:underline"
-                   >
-                       Change
-                   </button>
                </div>
 
                <div>
@@ -166,14 +261,11 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                         <input 
                           type="password" 
                           className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm text-slate-900 shadow-sm"
-                          placeholder="Optional (Overrides Default)"
+                          placeholder={editingRepoId ? "Unchanged" : "Optional"}
                           value={repoForm.passphrase}
                           onChange={e => setRepoForm({...repoForm, passphrase: e.target.value})}
                         />
                      </div>
-                     <p className="text-[9px] text-slate-500 mt-1">
-                        Leave empty to use the <b>Default Passphrase</b> from Settings.
-                     </p>
                    </div>
                </div>
 
@@ -192,16 +284,26 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
                      <div>
                          <label htmlFor="trust-host" className="text-sm font-semibold text-slate-800 cursor-pointer">Trust Unknown SSH Host</label>
                          <p className="text-xs text-slate-500 mt-0.5">
-                             Fixes "Exit Code 1" on first connection. Automatically accepts new SSH host keys (Disable Strict Host Check).
+                             Fixes "Exit Code 1" on first connection.
                          </p>
                      </div>
                  </div>
                </div>
+
+               {/* Logs for Initialization */}
+               {initLogs.length > 0 && (
+                   <div className="mt-4 bg-black rounded p-3 text-[10px] font-mono text-gray-300 max-h-32 overflow-y-auto">
+                       {initLogs.map((l, i) => <div key={i}>{l}</div>)}
+                   </div>
+               )}
+
              </div>
 
-             <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
-               <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-               <Button onClick={handleSave} disabled={!repoForm.name || !repoForm.url}>{editingRepoId ? 'Save Changes' : 'Add Repository'}</Button>
+             <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
+               <Button variant="secondary" onClick={() => setIsModalOpen(false)} disabled={initProcessing}>Cancel</Button>
+               <Button onClick={handleSave} disabled={!repoForm.name || !repoForm.url || initProcessing} loading={initProcessing}>
+                   {editingRepoId ? 'Save Changes' : (repoForm.initialize ? 'Initialize & Add' : 'Add Repository')}
+               </Button>
              </div>
            </div>
         </div>
@@ -240,6 +342,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
             onBreakLock={onBreakLock}
             onDelete={() => onDelete(repo.id)}
             onEdit={handleOpenEdit}
+            onMaintenance={handleOpenMaintenance}
           />
         ))}
         {filteredRepos.length === 0 && (
