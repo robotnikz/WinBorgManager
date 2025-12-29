@@ -3,6 +3,7 @@ import { Repository } from '../types';
 import RepoCard from '../components/RepoCard';
 import MaintenanceModal from '../components/MaintenanceModal';
 import KeyExportModal from '../components/KeyExportModal';
+import DeleteRepoModal from '../components/DeleteRepoModal';
 import Button from '../components/Button';
 import { Plus, Search, X, ShieldAlert, Key, Terminal, AlertCircle, Info, Link, Lock, FolderPlus, Loader2 } from 'lucide-react';
 import { borgService } from '../services/borgService';
@@ -35,8 +36,9 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
   const [maintenanceRepo, setMaintenanceRepo] = useState<Repository | null>(null);
   const [isMaintenanceOpen, setIsMaintenanceOpen] = useState(false);
   const [exportKeyRepo, setExportKeyRepo] = useState<Repository | null>(null);
+  const [deleteRepo, setDeleteRepo] = useState<Repository | null>(null);
 
-  // Terminal/Log Feedback for Maintenance
+  // Terminal/Log Feedback for Maintenance/Delete
   const [localLogData, setLocalLogData] = useState<{title: string, logs: string[]} | null>(null);
   
   const [repoForm, setRepoForm] = useState<{
@@ -186,6 +188,17 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
               repo={exportKeyRepo}
               isOpen={!!exportKeyRepo}
               onClose={() => setExportKeyRepo(null)}
+          />
+      )}
+      
+      {/* Delete Repo Modal */}
+      {deleteRepo && (
+          <DeleteRepoModal 
+            repo={deleteRepo}
+            isOpen={!!deleteRepo}
+            onClose={() => setDeleteRepo(null)}
+            onConfirmForget={() => onDelete(deleteRepo.id)}
+            onLog={(title, logs) => setLocalLogData({ title, logs })}
           />
       )}
 
@@ -427,7 +440,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({ repos, onAddRepo, o
             onMount={onMount}
             onCheck={onCheck}
             onBreakLock={onBreakLock}
-            onDelete={() => onDelete(repo.id)}
+            onDelete={() => setDeleteRepo(repo)}
             onEdit={handleOpenEdit}
             onMaintenance={handleOpenMaintenance}
             onExportKey={handleExportKey}
