@@ -565,6 +565,7 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
     const targetBinary = forceBinary || 'borg';
     
     // INJECT SECRET IF REPO ID PROVIDED
+    // Use a copy of envVars to avoid mutating original IPC object unexpectedly
     const vars = { ...envVars };
     if (repoId) {
         const secret = getDecryptedPassword(repoId);
@@ -576,6 +577,24 @@ ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, 
 
     if (useWsl) {
         bin = 'wsl'; 
+        
+        // WSL ENV MERGING FIX
+        // Get WSLENV from frontend (which contains BORG_DELETE_... etc)
+        let wslEnvParts = vars.WSLENV ? vars.WSLENV.split(':') : [];
+        
+        // Merge with System WSLENV (if any)
+        if (process.env.WSLENV) {
+            wslEnvParts = [...process.env.WSLENV.split(':'), ...wslEnvParts];
+        }
+        
+        // Ensure standard keys are always present
+        if (!wslEnvParts.includes('BORG_PASSPHRASE')) wslEnvParts.push('BORG_PASSPHRASE');
+        if (!wslEnvParts.includes('BORG_RSH')) wslEnvParts.push('BORG_RSH');
+        
+        // Deduplicate
+        const uniqueParts = [...new Set(wslEnvParts)];
+        vars.WSLENV = uniqueParts.join(':');
+
         if (cwd) {
             let wslCwd = cwd;
             if (/^[a-zA-Z]:/.test(cwd)) {
@@ -667,6 +686,14 @@ ipcMain.handle('borg-mount', (event, { args, mountId, useWsl, executablePath, en
         }
         bin = 'wsl';
         finalArgs = ['--exec', 'borg', ...args];
+        
+        // MOUNT also needs WSLENV handling if custom envs are used (rare, but good practice)
+        let wslEnvParts = vars.WSLENV ? vars.WSLENV.split(':') : [];
+        if (process.env.WSLENV) wslEnvParts = [...process.env.WSLENV.split(':'), ...wslEnvParts];
+        if (!wslEnvParts.includes('BORG_PASSPHRASE')) wslEnvParts.push('BORG_PASSPHRASE');
+        const uniqueParts = [...new Set(wslEnvParts)];
+        vars.WSLENV = uniqueParts.join(':');
+
     } else {
         bin = executablePath || 'borg';
         finalArgs = args;
