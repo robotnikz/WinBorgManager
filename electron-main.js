@@ -330,6 +330,13 @@ ipcMain.handle('create-directory', (event, pathString) => {
     });
 });
 
+ipcMain.handle('select-directory', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ['openDirectory']
+    });
+    return result;
+});
+
 // --- BORG EXECUTION ---
 
 ipcMain.handle('borg-spawn', (event, { args, commandId, useWsl, executablePath, envVars, forceBinary, wslUser, repoId, cwd }) => {
