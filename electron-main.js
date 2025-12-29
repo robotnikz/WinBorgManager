@@ -47,7 +47,7 @@ function persistSecrets() {
 }
 
 // Helper: Get decrypted password for a repo
-function getDecryptedPassword(repoId) {
+function getDecrypted password(repoId) {
     if (!repoId || !secretsCache[repoId]) return null;
     try {
         if (safeStorage.isEncryptionAvailable()) {
@@ -134,7 +134,20 @@ async function checkForUpdates(manual = false) {
             headers: { 'User-Agent': 'WinBorg-Updater' }
         });
         
-        if (!response.ok) throw new Error('Repo not found or API limit');
+        // Handle 404 specifically (No releases found)
+        if (response.status === 404) {
+            if (manual) {
+                dialog.showMessageBoxSync(mainWindow, {
+                    type: 'info',
+                    title: 'No Releases Found',
+                    message: 'No published releases found on GitHub.',
+                    detail: `The repository ${GITHUB_REPO} does not have any releases tagged 'latest'.`
+                });
+            }
+            return;
+        }
+
+        if (!response.ok) throw new Error(`GitHub API Error: ${response.status} ${response.statusText}`);
         
         const data = await response.json();
         const latestVersion = data.tag_name.replace(/^v/, ''); // Remove 'v' prefix if present

@@ -1,5 +1,5 @@
 import React from 'react';
-import { HardDrive, Server, Settings, LayoutDashboard, Database, Activity, Github, User, ExternalLink } from 'lucide-react';
+import { HardDrive, Server, Settings, LayoutDashboard, Database, Activity, Github, Code2, Heart } from 'lucide-react';
 import { View } from '../types';
 import AppLogo from './AppLogo';
 
@@ -17,11 +17,10 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) => {
     { view: View.ACTIVITY, label: 'Activity', icon: Activity },
   ];
 
-  // User Config (Hardcoded for now as requested, could be dynamic later)
-  const userProfile = {
+  // Developer Config
+  const devProfile = {
       name: "Tobia",
-      email: "tobia@example.com",
-      license: "Pro License",
+      role: "Developer",
       repo: "robotnikz/WinBorg"
   };
 
@@ -29,9 +28,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) => {
       e.stopPropagation();
       try {
           const { shell } = (window as any).require('electron');
-          shell.openExternal(`https://github.com/${userProfile.repo}`);
+          shell.openExternal(`https://github.com/${devProfile.repo}`);
       } catch(err) {
-          window.open(`https://github.com/${userProfile.repo}`, '_blank');
+          window.open(`https://github.com/${devProfile.repo}`, '_blank');
       }
   };
 
@@ -82,26 +81,22 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) => {
           Settings
         </button>
 
-        {/* User Profile Footer */}
+        {/* Developer / About Footer */}
         <div className="border-t border-gray-200 dark:border-slate-800 pt-4 mt-2 px-2 pb-4">
-            <div className="flex items-center gap-3 group p-2 rounded-lg hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm transition-all cursor-default">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shadow-sm">
-                    {userProfile.name.charAt(0)}
+            <div 
+                onClick={handleOpenRepo}
+                className="flex items-center gap-3 group p-2 rounded-lg hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm transition-all cursor-pointer"
+                title="View on GitHub"
+            >
+                <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 shadow-inner group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors">
+                    <Code2 className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">{userProfile.name}</div>
-                    <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate" title={userProfile.email}>{userProfile.email}</div>
-                    <div className="flex items-center gap-1.5 mt-1">
-                        <span className="text-[9px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded font-medium">
-                            {userProfile.license}
-                        </span>
-                        <button 
-                            onClick={handleOpenRepo}
-                            className="text-[10px] flex items-center gap-1 text-slate-400 hover:text-blue-500 transition-colors" 
-                            title="Open GitHub Repo"
-                        >
-                            <Github className="w-3 h-3" />
-                        </button>
+                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Developed by</div>
+                    <div className="text-sm font-bold text-slate-800 dark:text-slate-200 truncate">{devProfile.name}</div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                        <Github className="w-3 h-3 text-slate-400" />
+                        <span className="text-[10px] text-slate-400 group-hover:text-blue-500 transition-colors">Source Code</span>
                     </div>
                 </div>
             </div>
