@@ -1,7 +1,7 @@
 
 # WinBorg Manager
 
-![WinBorg Manager Dashboard](/public/icon.png)
+![WinBorg Manager Dashboard](/public/dashboard.png)
 
 **The modern, Windows 11-styled GUI for BorgBackup.**
 
