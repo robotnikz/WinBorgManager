@@ -1,0 +1,33 @@
+name: Publish to Public Repo
+
+on:
+  push:
+    branches:
+      - main  # Der Workflow startet, sobald du in den main-branch pushst
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # OPTIONAL: Hier kannst du Dateien löschen, die NICHT veröffentlicht werden sollen
+      - name: Clean up sensitive files
+        run: |
+          rm -rf internal_notes/
+          rm -f .env.development
+          # Behalte nur das, was wirklich raus soll
+
+      - name: Pushes to another repository
+        uses: cpina/github-action-push-to-another-repository@main
+        env:
+          SSH_DEPLOY_KEY: ${{ secrets.API_TOKEN_GITHUB }}
+        with:
+          source-directory: '.'
+          destination-github-username: 'robotnikz'
+          destination-repository-name: 'WinBorgManager'
+          user-email: 'tobiashalbei@mailbox.org'
+          target-branch: 'main'
