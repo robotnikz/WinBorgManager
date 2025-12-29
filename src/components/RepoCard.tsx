@@ -15,49 +15,48 @@ interface RepoCardProps {
 
 const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete, onEdit, onCheck, onBreakLock, onMaintenance }) => {
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200/75 dark:border-slate-700 p-5 shadow-sm hover:shadow-md transition-all duration-200 group relative overflow-hidden">
+    <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200/75 dark:border-slate-700 p-5 shadow-sm hover:shadow-md transition-all duration-200 group relative overflow-hidden flex flex-col h-full">
       
       {/* Top Row: Icon + Name + Unified Toolbar */}
       <div className="flex justify-between items-start mb-5 gap-3">
         
-        {/* Left: Icon & Title - Added min-w-0 to allow truncation in flex child */}
-        <div className="flex items-center gap-3.5 min-w-0">
-          <div className={`p-3 rounded-xl transition-colors shrink-0 ${
+        {/* Left: Icon & Title - Flex-1 ensures it takes remaining space, min-w-0 forces truncation inside flex */}
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className={`p-2.5 rounded-lg transition-colors shrink-0 ${
             repo.status === 'connected' ? 'bg-blue-600 text-white shadow-md shadow-blue-200 dark:shadow-blue-900/50' : 'bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-400'
           }`}>
             <Server className="w-5 h-5" />
           </div>
-          <div className="min-w-0">
-            <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base truncate pr-2" title={repo.name}>{repo.name}</h3>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base truncate" title={repo.name}>{repo.name}</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 truncate font-mono opacity-80" title={repo.url}>{repo.url}</p>
           </div>
         </div>
         
-        {/* Right: Unified Control Pill */}
+        {/* Right: Unified Control Pill - Compacted for space */}
         <div className="flex items-center bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg p-1 shadow-sm gap-1 shrink-0 ml-auto">
             
-            {/* Locked Indicator */}
+            {/* Locked Indicator - Icon Only on narrow cards */}
             {repo.isLocked && (
-                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800 mr-1" title="Repo is Locked (lock.roster exists)">
+                 <div className="flex items-center justify-center w-7 h-7 rounded-md bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800" title="Repo is Locked (lock.roster exists)">
                      <Lock className="w-3.5 h-3.5" />
-                     <span>Locked</span>
                  </div>
             )}
 
-            {/* Status Section */}
-            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
-              repo.status === 'connected' ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 
-              repo.status === 'connecting' ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' :
-              'bg-gray-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
-            }`}>
-                <div className={`w-1.5 h-1.5 rounded-full ${
+            {/* Status Section - COMPACT (Dot Only) to prevent overlap */}
+            <div 
+                className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
+                  repo.status === 'connected' ? 'bg-green-50 dark:bg-green-900/30' : 
+                  repo.status === 'connecting' ? 'bg-blue-50 dark:bg-blue-900/30' :
+                  'bg-gray-50 dark:bg-slate-800'
+                }`}
+                title={repo.status === 'connected' ? 'Status: Active' : repo.status === 'connecting' ? 'Status: Connecting' : 'Status: Offline'}
+            >
+                <div className={`w-2 h-2 rounded-full ${
                      repo.status === 'connected' ? 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.4)]' : 
                      repo.status === 'connecting' ? 'bg-blue-500 animate-pulse' :
                      'bg-slate-400'
                 }`} />
-                <span className="hidden sm:inline">{repo.status === 'connected' ? 'Active' : repo.status === 'connecting' ? 'Connecting' : 'Offline'}</span>
-                {/* Mobile text fallback */}
-                <span className="sm:hidden">{repo.status === 'connected' ? 'ON' : 'OFF'}</span>
             </div>
 
             {/* Divider */}
@@ -98,8 +97,8 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
         </div>
       </div>
 
-      {/* Info Grid */}
-      <div className="grid grid-cols-2 gap-y-3 gap-x-4 mb-5 p-3 bg-slate-50/50 dark:bg-slate-900/50 rounded-lg border border-slate-100/50 dark:border-slate-700/50">
+      {/* Info Grid - Pushes to bottom of flex col */}
+      <div className="grid grid-cols-2 gap-y-3 gap-x-4 mb-5 p-3 bg-slate-50/50 dark:bg-slate-900/50 rounded-lg border border-slate-100/50 dark:border-slate-700/50 mt-auto">
         <div className="flex items-center gap-2.5 text-xs text-slate-600 dark:text-slate-400">
           <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
           <span className="truncate">{repo.lastBackup}</span>
@@ -127,7 +126,7 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
               } disabled:opacity-70 disabled:cursor-not-allowed`}
             >
               {repo.status === 'connecting' ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-              {repo.status === 'connected' ? 'Refresh Connection' : 'Connect'}
+              {repo.status === 'connected' ? 'Refresh' : 'Connect'}
             </button>
             
             {repo.status === 'connected' && (
@@ -135,7 +134,7 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
                   onClick={() => onMount?.(repo)}
                   className="flex-1 px-3 py-2 text-xs font-semibold bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800 rounded-lg text-blue-700 dark:text-blue-400 transition-colors shadow-sm"
                 >
-                  Mount Archive
+                  Mount
                 </button>
             )}
          </div>
@@ -147,7 +146,7 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, onMount, onConnect, onDelete,
                    onClick={() => onCheck(repo)}
                    className="flex-1 px-3 py-1.5 text-[10px] font-medium text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 border border-transparent rounded-lg transition-colors flex items-center justify-center gap-1.5"
                 >
-                   <ShieldCheck className="w-3 h-3" /> Verify Integrity
+                   <ShieldCheck className="w-3 h-3" /> Verify
                 </button>
              )}
              
