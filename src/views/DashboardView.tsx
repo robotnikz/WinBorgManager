@@ -19,7 +19,11 @@ import {
   Lock,
   Moon,
   Sun,
-  FileText
+  FileText,
+  Play,
+  Plus,
+  RefreshCw,
+  FolderOpen
 } from 'lucide-react';
 import Button from '../components/Button';
 import { parseSizeString, formatBytes, formatDate, formatDuration } from '../utils/formatters';
@@ -33,29 +37,35 @@ interface DashboardViewProps {
   onCheck: (repo: Repository) => void;
   onChangeView: (view: any) => void;
   onAbortCheck?: (repo: Repository) => void;
+  onOneOffBackup?: (repo: Repository) => void;
   isDarkMode?: boolean;
   toggleTheme?: () => void;
 }
 
 const DashboardView: React.FC<DashboardViewProps> = ({ 
-    repos, mounts, activityLogs, onQuickMount, onConnect, onCheck, onChangeView, onAbortCheck, isDarkMode, toggleTheme 
+    repos, mounts, activityLogs, onQuickMount, onConnect, onCheck, onChangeView, onAbortCheck, onOneOffBackup, isDarkMode, toggleTheme 
 }) => {
   
   // Real-time Current File Logic
   const [currentFile, setCurrentFile] = useState<string>('');
   
+  // Greeting Logic
+  const getGreeting = () => {
+      const hour = new Date().getHours();
+      if (hour < 12) return 'Good Morning';
+      if (hour < 18) return 'Good Afternoon';
+      return 'Good Evening';
+  };
+  
   // Listen for terminal logs to extract "Current File" being backed up
-  // Borg outputs "A /path/to/file" or "M /path/to/file" on stdout
   useEffect(() => {
     const handleTerminalLog = (_: any, data: { id: string, text: string }) => {
-        // Simple regex to find file paths starting with A (Added), M (Modified), U (Unchanged)
-        // Format is usually: "A path/to/file"
         const lines = data.text.split('\n');
         for (const line of lines) {
             const match = line.match(/^[AMU]\s+(.+)$/);
             if (match) {
                 setCurrentFile(match[1]);
-                break; // Just take the first one found in chunk
+                break; 
             }
         }
     };
@@ -70,7 +80,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({
   }, []);
 
 
-  // Force update to recalculate ETA every second if needed
+  // Force update for ETA
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
       const hasRunningCheck = repos.some(r => r.checkStatus === 'running');
@@ -85,17 +95,10 @@ const DashboardView: React.FC<DashboardViewProps> = ({
     const totalRepos = repos.length;
     const activeMounts = mounts.length;
     const connectedRepos = repos.filter(r => r.status === 'connected').length;
-    
-    // Check Statuses
     const runningChecks = repos.filter(r => r.checkStatus === 'running').length;
     const errorChecks = repos.filter(r => r.checkStatus === 'error').length;
-    
-    // Calculate total size stored
     const totalBytes = repos.reduce((acc, repo) => acc + parseSizeString(repo.size), 0);
-    
-    // Simulate Original Size
     const simulatedOriginalBytes = totalBytes * 2.4; 
-    
     const savingsBytes = simulatedOriginalBytes - totalBytes;
     const savingsPercent = totalBytes > 0 ? Math.round((savingsBytes / simulatedOriginalBytes) * 100) : 0;
 
@@ -113,6 +116,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({
     };
   }, [repos, mounts]);
 
+  // Actions
   const handleSmartVerify = () => {
     if (repos.length === 1 && repos[0].status === 'connected') {
         onCheck(repos[0]);
@@ -121,7 +125,19 @@ const DashboardView: React.FC<DashboardViewProps> = ({
     }
   };
 
-  // Helper to format rough relative time for dashboard
+  const handleQuickBackup = () => {
+      // Find the first available connected repo, or prompt
+      const connected = repos.find(r => r.status === 'connected');
+      if (connected && onOneOffBackup) {
+          onOneOffBackup(connected);
+      } else if (repos.length > 0) {
+          // If not connected but exists, try to connect first (user has to do it manually in list for now)
+          onChangeView(View.REPOSITORIES);
+      } else {
+          onChangeView(View.REPOSITORIES);
+      }
+  };
+
   const getRelativeTime = (iso: string) => {
       try {
           const diff = Date.now() - new Date(iso).getTime();
@@ -134,31 +150,38 @@ const DashboardView: React.FC<DashboardViewProps> = ({
       } catch { return iso; }
   };
   
-  // Calculate ETA for specific repo
   const getEta = (repo: Repository) => {
       if (repo.checkStatus !== 'running' || !repo.checkStartTime || !repo.checkProgress || repo.checkProgress <= 0.5) return null;
-      
       const elapsedMs = now - repo.checkStartTime;
-      if (elapsedMs < 2000) return "Calculating..."; // Buffer for initial calculation
-
+      if (elapsedMs < 2000) return "Calculating...";
       const timePerPercent = elapsedMs / repo.checkProgress;
       const remainingPercent = 100 - repo.checkProgress;
       const remainingMs = timePerPercent * remainingPercent;
-      
       return formatDuration(remainingMs / 1000) + ' remaining';
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
       
       {/* Header / Hero Section */}
       <div className="flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-bold text-slate-800 dark:text-white">Overview</h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">Backup Infrastructure Status</p>
+          <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
+              {getGreeting()}
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2">
+              <Activity className="w-4 h-4" />
+              System Status: 
+              {stats.errorChecks > 0 ? (
+                  <span className="text-red-500 font-medium">Attention Needed</span>
+              ) : stats.runningChecks > 0 ? (
+                  <span className="text-blue-500 font-medium">Processing...</span>
+              ) : (
+                  <span className="text-green-600 dark:text-green-400 font-medium">Operational</span>
+              )}
+          </p>
         </div>
         <div className="flex items-center gap-4">
-             {/* Theme Toggle */}
              {toggleTheme && (
                  <button 
                     onClick={toggleTheme}
@@ -168,105 +191,87 @@ const DashboardView: React.FC<DashboardViewProps> = ({
                      {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                  </button>
              )}
-
-             {stats.runningChecks > 0 ? (
-                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-full text-blue-700 dark:text-blue-300 text-sm font-medium animate-pulse">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Running Integrity Check...</span>
-                 </div>
-             ) : stats.errorChecks > 0 ? (
-                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-full text-red-700 dark:text-red-300 text-sm font-medium">
-                    <AlertTriangle className="w-4 h-4" />
-                    <span>Integrity Issues Found</span>
-                 </div>
-             ) : (
-                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-full text-green-700 dark:text-green-300 text-sm font-medium">
-                    <ShieldCheck className="w-4 h-4" />
-                    <span>All Systems Operational</span>
-                 </div>
-             )}
         </div>
       </div>
 
-      {/* Top Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard 
-             title="Total Repositories" 
-             value={stats.totalRepos.toString()} 
-             icon={Server} 
-             color="blue"
-             subtext={`${stats.connectedRepos} Connected`}
-          />
-          <StatCard 
-             title="Active Mounts" 
-             value={stats.activeMounts.toString()} 
-             icon={HardDrive} 
-             color="indigo"
-             subtext={stats.activeMounts > 0 ? "Filesystem Accessible" : "No mounts active"}
-          />
-          <StatCard 
-             title="Storage Used" 
-             value={stats.formattedTotal} 
-             icon={Database} 
-             color="emerald"
-             subtext="Deduplicated Size"
-          />
-          <StatCard 
-             title="Est. Savings" 
-             value={`${stats.savingsPercent}%`} 
-             icon={ArrowUpRight} 
-             color="purple"
-             subtext={`~ ${stats.formattedSavings} saved`}
-          />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Main Column: Storage Efficiency & Repos */}
-        <div className="lg:col-span-2 space-y-6">
+        {/* LEFT COLUMN: QUICK ACTIONS & REPOS */}
+        <div className="lg:col-span-2 space-y-8">
             
-            {/* Efficiency Visualizer */}
-            <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-6">
-                    <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-                        <Activity className="w-5 h-5 text-slate-500 dark:text-slate-400" />
-                        Storage Efficiency
-                    </h3>
-                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">Borg Deduplication</span>
-                </div>
-                
-                <div className="space-y-6">
-                    {/* Visual Bars */}
-                    <div className="relative pt-6 pb-2">
-                         {/* Original Size Bar */}
-                         <div className="flex justify-between text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-                             <span>Original Data Size (Est.)</span>
-                             <span>{stats.formattedOriginal}</span>
-                         </div>
-                         <div className="w-full h-3 bg-gray-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                             <div className="h-full bg-gray-300 dark:bg-slate-600 rounded-full w-full"></div>
-                         </div>
+            {/* Quick Actions Grid */}
+            <div>
+                <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Quick Actions</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    {/* Action 1: New Backup */}
+                    <button 
+                        onClick={handleQuickBackup}
+                        className="p-4 bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 rounded-xl text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 hover:scale-[1.02] transition-all flex flex-col items-start gap-3"
+                    >
+                        <div className="p-2 bg-white/20 rounded-lg">
+                            <Zap className="w-5 h-5 text-white" />
+                        </div>
+                        <div className="text-left">
+                            <div className="font-bold text-sm">New Backup</div>
+                            <div className="text-[10px] text-blue-100 opacity-80">Create snapshot</div>
+                        </div>
+                    </button>
 
-                         {/* Compressed Size Bar */}
-                         <div className="flex justify-between text-xs font-medium text-blue-600 dark:text-blue-400 mt-4 mb-1">
-                             <span>Actual Repository Size</span>
-                             <span>{stats.formattedTotal}</span>
-                         </div>
-                         <div className="w-full h-3 bg-blue-50/50 dark:bg-blue-900/30 rounded-full overflow-hidden border border-blue-100 dark:border-blue-900">
-                             <div 
-                                className="h-full bg-blue-500 dark:bg-blue-600 rounded-full shadow-sm transition-all duration-1000" 
-                                style={{ width: `${100 - stats.savingsPercent}%` }}
-                             ></div>
-                         </div>
-                    </div>
+                    {/* Action 2: Add Repo */}
+                    <button 
+                        onClick={() => onChangeView(View.REPOSITORIES)}
+                        className="p-4 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl hover:border-blue-300 dark:hover:border-blue-500 transition-colors flex flex-col items-start gap-3 group"
+                    >
+                        <div className="p-2 bg-gray-100 dark:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/30 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                            <Plus className="w-5 h-5" />
+                        </div>
+                        <div className="text-left">
+                            <div className="font-bold text-sm text-slate-800 dark:text-slate-200">Add Repo</div>
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400">Connect new source</div>
+                        </div>
+                    </button>
+
+                    {/* Action 3: Mount Latest */}
+                    <button 
+                        onClick={() => {
+                            const connected = repos.find(r => r.status === 'connected');
+                            if(connected) onQuickMount(connected);
+                            else onChangeView(View.REPOSITORIES);
+                        }}
+                        className="p-4 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl hover:border-indigo-300 dark:hover:border-indigo-500 transition-colors flex flex-col items-start gap-3 group"
+                    >
+                        <div className="p-2 bg-gray-100 dark:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300 group-hover:bg-indigo-50 dark:group-hover:bg-indigo-900/30 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                            <FolderOpen className="w-5 h-5" />
+                        </div>
+                        <div className="text-left">
+                            <div className="font-bold text-sm text-slate-800 dark:text-slate-200">Mount</div>
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400">Browse latest files</div>
+                        </div>
+                    </button>
+
+                    {/* Action 4: Verify */}
+                    <button 
+                        onClick={handleSmartVerify}
+                        className="p-4 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl hover:border-emerald-300 dark:hover:border-emerald-500 transition-colors flex flex-col items-start gap-3 group"
+                    >
+                        <div className="p-2 bg-gray-100 dark:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-900/30 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                            <ShieldCheck className="w-5 h-5" />
+                        </div>
+                        <div className="text-left">
+                            <div className="font-bold text-sm text-slate-800 dark:text-slate-200">Verify</div>
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400">Check integrity</div>
+                        </div>
+                    </button>
                 </div>
             </div>
 
             {/* Repositories List */}
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-gray-50/50 dark:bg-slate-900/50">
-                    <h3 className="font-semibold text-slate-800 dark:text-white">Repository Status</h3>
-                    <Button variant="ghost" size="sm" onClick={() => onChangeView('REPOSITORIES')} className="dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-700">Manage</Button>
+                    <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                        <Server className="w-4 h-4 text-slate-500" /> Repository Status
+                    </h3>
+                    <Button variant="ghost" size="sm" onClick={() => onChangeView('REPOSITORIES')} className="text-xs">View All</Button>
                 </div>
                 <div className="divide-y divide-gray-100 dark:divide-slate-700">
                     {repos.length === 0 ? (
@@ -277,101 +282,71 @@ const DashboardView: React.FC<DashboardViewProps> = ({
                         repos.map(repo => {
                             const eta = getEta(repo);
                             return (
-                                <div key={repo.id} className="px-6 py-4 flex flex-col gap-2 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
+                                <div key={repo.id} className="px-6 py-4 flex flex-col gap-2 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors group">
                                     <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-4 flex-1">
-                                            <div className={`w-2 h-2 rounded-full ${repo.status === 'connected' ? 'bg-green-500' : 'bg-gray-300 dark:bg-slate-600'}`}></div>
-                                            <div className="flex-1">
-                                                <div className="font-medium text-slate-800 dark:text-slate-200">{repo.name}</div>
+                                        <div className="flex items-center gap-4 flex-1 overflow-hidden">
+                                            <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${repo.status === 'connected' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-gray-300 dark:bg-slate-600'}`}></div>
+                                            <div className="min-w-0">
+                                                <div className="font-bold text-sm text-slate-800 dark:text-slate-200 truncate">{repo.name}</div>
                                                 <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-0.5">
-                                                    <span className="truncate max-w-[150px]">{repo.url}</span>
+                                                    <span className="truncate max-w-[200px]">{repo.url}</span>
                                                     
-                                                    {/* LOCKED BADGE */}
+                                                    {/* Status Badges */}
                                                     {repo.isLocked && (
-                                                        <span className="flex items-center gap-1 text-orange-700 dark:text-orange-300 bg-orange-100 dark:bg-orange-900/30 px-1.5 py-0.5 rounded ml-2 border border-orange-200 dark:border-orange-800" title="This repository is currently locked by a process (lock.roster found)">
+                                                        <span className="flex items-center gap-1 text-[10px] text-orange-700 bg-orange-100 px-1.5 py-0.5 rounded">
                                                             <Lock className="w-3 h-3" /> Locked
                                                         </span>
                                                     )}
-
-                                                    {/* Integrity Status Badge */}
                                                     {repo.checkStatus === 'running' && (
-                                                        <div className="flex flex-col gap-1.5 ml-2 w-48">
-                                                            <div className="flex justify-between items-end">
-                                                                <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1">
-                                                                    <Loader2 className="w-3 h-3 animate-spin" /> 
-                                                                    {typeof repo.checkProgress === 'number' ? `${Math.round(repo.checkProgress)}%` : '0%'}
-                                                                </span>
-                                                                {eta && (
-                                                                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono flex items-center gap-1">
-                                                                        <Timer className="w-3 h-3" /> {eta}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            <div className="h-1.5 w-full bg-blue-100 dark:bg-blue-900 rounded-full overflow-hidden">
-                                                                <div 
-                                                                    className="h-full bg-blue-500 dark:bg-blue-500 rounded-full transition-all duration-300" 
-                                                                    style={{ width: `${repo.checkProgress || 0}%` }}
-                                                                ></div>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                    {repo.checkStatus === 'ok' && (
-                                                        <span className="flex items-center gap-1 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-1.5 py-0.5 rounded ml-2" title={`Verified: ${repo.lastCheckTime}`}>
-                                                            <CheckCircle2 className="w-3 h-3" /> Verified
-                                                        </span>
-                                                    )}
-                                                    {repo.checkStatus === 'error' && (
-                                                        <span className="flex items-center gap-1 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-1.5 py-0.5 rounded ml-2">
-                                                            <XCircle className="w-3 h-3" /> Check Failed
-                                                        </span>
-                                                    )}
-                                                     {repo.checkStatus === 'aborted' && (
-                                                        <span className="flex items-center gap-1 text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/30 px-1.5 py-0.5 rounded ml-2">
-                                                            <XSquare className="w-3 h-3" /> Aborted
+                                                        <span className="flex items-center gap-1 text-[10px] text-blue-600 font-medium">
+                                                            <Loader2 className="w-3 h-3 animate-spin" /> Check Running {eta ? `(${eta})` : ''}
                                                         </span>
                                                     )}
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-4">
-                                            <div className="text-right mr-2 hidden sm:block">
-                                                <div className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">Last Backup</div>
-                                                <div className="text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center justify-end gap-1">
-                                                    <Clock className="w-3 h-3" /> {repo.lastBackup}
-                                                </div>
-                                            </div>
-                                            <div className="flex gap-2">
-                                                {repo.checkStatus === 'running' ? (
-                                                    <Button size="sm" variant="danger" onClick={() => onAbortCheck?.(repo)}>
-                                                        Abort
-                                                    </Button>
-                                                ) : (
-                                                    <>
-                                                        <Button 
-                                                            size="sm" 
-                                                            variant="secondary"
-                                                            onClick={() => onConnect(repo)}
-                                                            disabled={repo.status === 'connected'}
-                                                            className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600"
+                                        
+                                        {/* Inline Actions */}
+                                        <div className="flex items-center gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                            {repo.status === 'connected' ? (
+                                                <>
+                                                    <button 
+                                                        onClick={() => onQuickMount(repo)}
+                                                        className="p-1.5 bg-gray-100 dark:bg-slate-700 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg transition-colors"
+                                                        title="Mount"
+                                                    >
+                                                        <HardDrive className="w-4 h-4" />
+                                                    </button>
+                                                    {onOneOffBackup && (
+                                                        <button 
+                                                            onClick={() => onOneOffBackup(repo)}
+                                                            className="p-1.5 bg-gray-100 dark:bg-slate-700 hover:bg-green-100 dark:hover:bg-green-900/30 text-slate-600 dark:text-slate-300 hover:text-green-600 dark:hover:text-green-400 rounded-lg transition-colors"
+                                                            title="New Backup"
                                                         >
-                                                            {repo.status === 'connected' ? 'Connected' : 'Connect'}
-                                                        </Button>
-                                                        {repo.status === 'connected' && (
-                                                            <Button size="sm" onClick={() => onQuickMount(repo)}>
-                                                                Mount
-                                                            </Button>
-                                                        )}
-                                                    </>
-                                                )}
-                                            </div>
+                                                            <Play className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <button 
+                                                    onClick={() => onConnect(repo)}
+                                                    disabled={repo.status === 'connecting'}
+                                                    className="px-3 py-1.5 bg-slate-800 dark:bg-slate-700 text-white text-xs font-medium rounded-lg hover:bg-slate-700 dark:hover:bg-slate-600 transition-colors flex items-center gap-2"
+                                                >
+                                                    {repo.status === 'connecting' ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                                    Connect
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                     
-                                    {/* CURRENT FILE PROCESSING INDICATOR */}
-                                    {currentFile && (repo.checkStatus === 'running' || repo.status === 'connecting') && (
-                                        <div className="mt-1 flex items-center gap-2 text-xs font-mono text-slate-400 bg-slate-100 dark:bg-slate-900 p-1.5 rounded truncate">
-                                            <FileText className="w-3 h-3 flex-shrink-0" />
-                                            <span className="truncate">{currentFile}</span>
+                                    {/* Progress Bar for Checks */}
+                                    {repo.checkStatus === 'running' && (
+                                        <div className="h-1 w-full bg-blue-100 dark:bg-blue-900 rounded-full overflow-hidden mt-1">
+                                            <div 
+                                                className="h-full bg-blue-500 rounded-full transition-all duration-300" 
+                                                style={{ width: `${repo.checkProgress || 0}%` }}
+                                            ></div>
                                         </div>
                                     )}
                                 </div>
@@ -382,62 +357,77 @@ const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
         </div>
 
-        {/* Right Column: Recent Activity & Quick Actions */}
-        <div className="space-y-6">
+        {/* RIGHT COLUMN: STATS & LOGS */}
+        <div className="space-y-8">
             
-            {/* Quick Actions */}
-            <div className="bg-gradient-to-br from-slate-800 to-slate-900 dark:from-blue-900 dark:to-slate-900 rounded-xl p-6 text-white shadow-lg">
-                <h3 className="font-semibold mb-4">Quick Actions</h3>
-                <div className="space-y-3">
-                    <button 
-                        onClick={() => onChangeView(View.REPOSITORIES)}
-                        className="w-full text-left px-4 py-3 bg-white/10 hover:bg-white/20 rounded-lg transition-colors flex items-center gap-3 border border-white/5"
-                    >
-                        <Server className="w-5 h-5 text-blue-300" />
-                        <div>
-                            <div className="text-sm font-medium">Add Repository</div>
-                            <div className="text-xs text-slate-400 dark:text-slate-300">Connect to a new SSH remote</div>
-                        </div>
-                    </button>
-                    <button 
-                         onClick={handleSmartVerify}
-                         disabled={stats.runningChecks > 0}
-                         className="w-full text-left px-4 py-3 bg-white/10 hover:bg-white/20 rounded-lg transition-colors flex items-center gap-3 border border-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <AlertTriangle className="w-5 h-5 text-yellow-300" />
-                        <div>
-                            <div className="text-sm font-medium">Verify Integrity</div>
-                            <div className="text-xs text-slate-400 dark:text-slate-300">Run consistency checks</div>
-                        </div>
-                    </button>
+            {/* Mini Stats Grid */}
+            <div className="grid grid-cols-2 gap-4">
+                <StatCard 
+                    title="Repositories" 
+                    value={stats.totalRepos.toString()} 
+                    icon={Server} 
+                    color="blue"
+                />
+                <StatCard 
+                    title="Active Mounts" 
+                    value={stats.activeMounts.toString()} 
+                    icon={HardDrive} 
+                    color="indigo"
+                />
+            </div>
+
+            {/* Storage Efficiency */}
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-slate-800 dark:text-white text-sm">Storage Efficiency</h3>
+                    <span className="text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded">
+                        {stats.savingsPercent}% Saved
+                    </span>
+                </div>
+                
+                <div className="space-y-4">
+                    <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400">
+                        <span>Physical Size</span>
+                        <span className="font-mono text-slate-700 dark:text-slate-200">{stats.formattedTotal}</span>
+                    </div>
+                    <div className="w-full h-2.5 bg-gray-100 dark:bg-slate-700 rounded-full overflow-hidden flex">
+                        <div className="h-full bg-blue-500 dark:bg-blue-600" style={{ width: `${100 - stats.savingsPercent}%` }}></div>
+                    </div>
+                    <div className="flex justify-between text-xs text-slate-400 dark:text-slate-500 pt-1">
+                        <span>Deduplicated from {stats.formattedOriginal}</span>
+                    </div>
                 </div>
             </div>
 
-            {/* REAL Activity Log */}
-            <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-6 shadow-sm">
-                <h3 className="font-semibold text-slate-800 dark:text-white mb-4">Activity Log</h3>
-                <div className="relative border-l border-gray-200 dark:border-slate-700 ml-2 space-y-6">
+            {/* Activity Log Preview */}
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5 shadow-sm flex flex-col h-full max-h-[400px]">
+                <h3 className="font-semibold text-slate-800 dark:text-white text-sm mb-4">Recent Activity</h3>
+                <div className="flex-1 overflow-y-auto pr-1 space-y-4">
                     {activityLogs.length === 0 ? (
                         <div className="text-center py-4 text-slate-400 text-xs">
                             No recent activity
                         </div>
                     ) : (
                         activityLogs.slice(0, 5).map(log => (
-                            <ActivityItem 
-                                key={log.id}
-                                status={log.status}
-                                title={log.title}
-                                desc={log.detail}
-                                time={getRelativeTime(log.time)}
-                            />
+                            <div key={log.id} className="flex gap-3 items-start group">
+                                <div className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                                    log.status === 'success' ? 'bg-green-500' : 
+                                    log.status === 'warning' ? 'bg-yellow-500' : 
+                                    log.status === 'error' ? 'bg-red-500' : 'bg-blue-500'
+                                }`}></div>
+                                <div className="min-w-0">
+                                    <div className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{log.title}</div>
+                                    <div className="text-[10px] text-slate-400 truncate">{getRelativeTime(log.time)}</div>
+                                </div>
+                            </div>
                         ))
                     )}
                 </div>
                 <button 
                     onClick={() => onChangeView(View.ACTIVITY)}
-                    className="w-full mt-6 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                    className="mt-4 text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline w-full text-left"
                 >
-                    View Full Logs
+                    View Full History
                 </button>
             </div>
 
@@ -450,55 +440,23 @@ const DashboardView: React.FC<DashboardViewProps> = ({
 
 // --- Subcomponents ---
 
-const StatCard = ({ title, value, icon: Icon, color, subtext }: any) => {
+const StatCard = ({ title, value, icon: Icon, color }: any) => {
     const colors = {
-        blue: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
-        indigo: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400',
-        emerald: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400',
-        purple: 'bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400'
+        blue: 'text-blue-600 bg-blue-50 dark:bg-blue-900/20',
+        indigo: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20',
     };
 
     return (
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-start justify-between">
-                <div>
-                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{title}</p>
-                    <h3 className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{value}</h3>
+        <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm flex flex-col justify-between h-24">
+            <div className="flex justify-between items-start">
+                <div className={`p-1.5 rounded-lg ${colors[color as keyof typeof colors]}`}>
+                    <Icon className="w-4 h-4" />
                 </div>
-                <div className={`p-2 rounded-lg ${colors[color as keyof typeof colors]}`}>
-                    <Icon className="w-5 h-5" />
-                </div>
+                <span className="text-2xl font-bold text-slate-800 dark:text-white">{value}</span>
             </div>
-            <p className="text-xs text-slate-400 dark:text-slate-500 mt-2 font-medium">
-                {subtext}
-            </p>
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">{title}</p>
         </div>
     );
-}
-
-const ActivityItem = ({ status, title, desc, time }: any) => {
-    const statusColors = {
-        success: 'bg-green-500',
-        warning: 'bg-yellow-500',
-        error: 'bg-red-500',
-        info: 'bg-blue-500'
-    };
-    
-    // Fallback if an unknown status string is passed
-    const dotColor = statusColors[status as keyof typeof statusColors] || 'bg-gray-400';
-
-    return (
-        <div className="ml-6 relative">
-            <div className={`absolute -left-[31px] top-0 w-4 h-4 rounded-full border-2 border-white dark:border-slate-800 ring-1 ring-gray-100 dark:ring-slate-700 ${dotColor}`}></div>
-            <div className="flex justify-between items-start">
-                <div className="flex-1 overflow-hidden mr-2">
-                    <div className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{title}</div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400 truncate" title={desc}>{desc}</div>
-                </div>
-                <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono mt-0.5 whitespace-nowrap">{time}</div>
-            </div>
-        </div>
-    )
 }
 
 export default DashboardView;

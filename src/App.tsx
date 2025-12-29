@@ -10,6 +10,7 @@ import ActivityView from './views/ActivityView';
 import ArchivesView from './views/ArchivesView';
 import TerminalModal from './components/TerminalModal';
 import FuseSetupModal from './components/FuseSetupModal';
+import CreateBackupModal from './components/CreateBackupModal';
 import { View, Repository, MountPoint, Archive, ActivityLogEntry, BackupJob } from './types';
 import { borgService } from './services/borgService';
 import { formatDate } from './utils/formatters';
@@ -99,6 +100,9 @@ const App: React.FC = () => {
   // --- STATE: MOUNTS ---
   const [mounts, setMounts] = useState<MountPoint[]>([]);
   const [preselectedRepoId, setPreselectedRepoId] = useState<string | null>(null);
+
+  // --- MODAL STATES FOR DASHBOARD ACCESS ---
+  const [backupRepo, setBackupRepo] = useState<Repository | null>(null);
 
   // --- STATE: ACTIVITY LOGS ---
   const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>(() => {
@@ -715,6 +719,7 @@ const App: React.FC = () => {
               onCheck={handleCheckIntegrity}
               onChangeView={setCurrentView}
               onAbortCheck={handleAbortCheck}
+              onOneOffBackup={(r) => setBackupRepo(r)}
               isDarkMode={isDarkMode}
               toggleTheme={toggleTheme}
            />
@@ -725,6 +730,22 @@ const App: React.FC = () => {
   return (
     <div className="h-screen w-screen relative">
         <ToastContainer />
+        
+        {/* GLOBAL BACKUP MODAL (ACCESSIBLE FROM DASHBOARD) */}
+        {backupRepo && (
+          <CreateBackupModal 
+              repo={backupRepo}
+              isOpen={!!backupRepo}
+              onClose={() => setBackupRepo(null)}
+              onLog={(title, logs) => {
+                  // If we wanted to show a log modal here we could, for now just toast/close
+              }}
+              onSuccess={() => {
+                  if(backupRepo) handleConnect(backupRepo);
+              }}
+          />
+        )}
+
         <div className="flex flex-col h-full w-full overflow-hidden bg-[#f3f3f3] dark:bg-[#0f172a] transition-colors duration-300">
           <TitleBar />
           <div className="flex flex-1 overflow-hidden pt-9">
