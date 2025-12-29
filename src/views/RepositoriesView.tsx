@@ -5,7 +5,7 @@ import MaintenanceModal from '../components/MaintenanceModal';
 import KeyExportModal from '../components/KeyExportModal';
 import DeleteRepoModal from '../components/DeleteRepoModal';
 import Button from '../components/Button';
-import { Plus, Search, X, ShieldAlert, Key, Terminal, AlertCircle, Info, Link, Lock, FolderPlus, Loader2 } from 'lucide-react';
+import { Plus, Search, X, Info, Link, FolderPlus, Loader2, Terminal } from 'lucide-react';
 import { borgService } from '../services/borgService';
 
 interface RepositoriesViewProps {
