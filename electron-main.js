@@ -4,15 +4,20 @@
  * REAL BACKEND FOR WINBORG
  */
 
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, safeStorage, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, safeStorage, nativeImage, dialog } = require('electron');
 const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
+// --- CONFIGURATION ---
+// CHANGE THIS TO YOUR REPO: user/repo
+const GITHUB_REPO = "robotnikz/WinBorg"; 
+
 let mainWindow;
 let tray = null;
 let isQuitting = false;
+let closeToTray = false; // Default: Close quits app
 
 // Keep track of active mount processes to kill them on exit/unmount
 const activeMounts = new Map();
@@ -81,12 +86,16 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
   }
 
-  // Handle Close (Minimize to Tray instead of Quit)
+  // Handle Close behavior based on settings
   mainWindow.on('close', (event) => {
       if (!isQuitting) {
-          event.preventDefault();
-          mainWindow.hide();
-          return false;
+          if (closeToTray) {
+              event.preventDefault();
+              mainWindow.hide();
+              return false;
+          }
+          // If closeToTray is false, we let the event propagate, which destroys the window.
+          // However, we need to ensure app.quit is called to cleanup processes.
       }
   });
 }
@@ -99,7 +108,9 @@ function createTray() {
     tray.setToolTip('WinBorg Manager');
     
     const contextMenu = Menu.buildFromTemplate([
-        { label: 'Open WinBorg', click: () => mainWindow.show() },
+        { label: 'Show WinBorg', click: () => mainWindow.show() },
+        { type: 'separator' },
+        { label: 'Check for Updates', click: () => checkForUpdates(true) },
         { type: 'separator' },
         { label: 'Quit', click: () => {
             isQuitting = true;
@@ -111,9 +122,63 @@ function createTray() {
     tray.on('double-click', () => mainWindow.show());
 }
 
+// --- UPDATE CHECKER LOGIC ---
+// Simple fetch-based checker to avoid 'electron-updater' dependency issues in this setup
+async function checkForUpdates(manual = false) {
+    try {
+        const pkg = require('./package.json');
+        const currentVersion = pkg.version;
+        
+        // Fetch latest release from GitHub API
+        const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+            headers: { 'User-Agent': 'WinBorg-Updater' }
+        });
+        
+        if (!response.ok) throw new Error('Repo not found or API limit');
+        
+        const data = await response.json();
+        const latestVersion = data.tag_name.replace(/^v/, ''); // Remove 'v' prefix if present
+        
+        // Very basic semver check
+        if (latestVersion !== currentVersion) {
+            const choice = dialog.showMessageBoxSync(mainWindow, {
+                type: 'info',
+                buttons: ['Download', 'Later'],
+                title: 'Update Available',
+                message: `A new version (${latestVersion}) is available.`,
+                detail: `Current version: ${currentVersion}\n\n${data.body || 'New features and bug fixes.'}`
+            });
+            
+            if (choice === 0) {
+                shell.openExternal(data.html_url);
+            }
+        } else if (manual) {
+            dialog.showMessageBoxSync(mainWindow, {
+                type: 'info',
+                title: 'No Updates',
+                message: 'You are using the latest version.',
+                detail: `Version: ${currentVersion}`
+            });
+        }
+    } catch (e) {
+        if (manual) {
+            dialog.showMessageBoxSync(mainWindow, {
+                type: 'error',
+                title: 'Update Check Failed',
+                message: 'Could not check for updates.',
+                detail: e.message
+            });
+        }
+        console.error("Update check failed:", e);
+    }
+}
+
 app.whenReady().then(() => {
     createWindow();
     createTray();
+    
+    // Check for updates on startup
+    setTimeout(() => checkForUpdates(false), 3000);
 });
 
 app.on('before-quit', () => {
@@ -121,8 +186,10 @@ app.on('before-quit', () => {
 });
 
 app.on('window-all-closed', () => {
-  // Do NOT quit automatically on Windows close, wait for Tray Quit
-  if (process.platform !== 'darwin' && isQuitting) {
+  // If user configured "Close to Tray" (false), and they clicked X, the window closes.
+  // In Electron, window-all-closed usually quits unless macOS.
+  // We respect isQuitting flag or closeToTray.
+  if (process.platform !== 'darwin' && !closeToTray) {
       cleanupAndQuit();
   }
 });
@@ -137,6 +204,19 @@ function cleanupAndQuit() {
     app.quit();
 }
 
+// --- IPC HANDLERS ---
+
+// Settings: Sync "Close to Tray" preference
+ipcMain.on('set-close-behavior', (event, shouldCloseToTray) => {
+    closeToTray = shouldCloseToTray;
+});
+
+// Manual Update Check from UI
+ipcMain.handle('check-for-updates', async () => {
+    await checkForUpdates(true);
+    return true;
+});
+
 // --- WINDOW CONTROLS HANDLERS ---
 ipcMain.on('window-minimize', () => { if (mainWindow) mainWindow.minimize(); });
 ipcMain.on('window-maximize', () => {
@@ -145,7 +225,7 @@ ipcMain.on('window-maximize', () => {
     }
 });
 ipcMain.on('window-close', () => {
-    // This triggers the 'close' event on BrowserWindow, which we intercept above
+    // This triggers the 'close' event on BrowserWindow
     if (mainWindow) mainWindow.close(); 
 });
 

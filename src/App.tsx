@@ -34,6 +34,16 @@ const App: React.FC = () => {
 
   const toggleTheme = () => setIsDarkMode(!isDarkMode);
 
+  // --- INITIALIZE SETTINGS SYNC ---
+  useEffect(() => {
+      // Sync the Close-to-Tray setting to main process on startup
+      const storedCloseToTray = localStorage.getItem('winborg_close_to_tray') === 'true';
+      try {
+          const { ipcRenderer } = (window as any).require('electron');
+          ipcRenderer.send('set-close-behavior', storedCloseToTray);
+      } catch(e) {}
+  }, []);
+
   // --- STATE: REPOS ---
   const [repos, setRepos] = useState<Repository[]>(() => {
     const isInitialized = localStorage.getItem('winborg_initialized');
