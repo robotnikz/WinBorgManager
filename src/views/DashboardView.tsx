@@ -126,14 +126,13 @@ const DashboardView: React.FC<DashboardViewProps> = ({
   };
 
   const handleQuickBackup = () => {
-      // Find the first available connected repo, or prompt
-      const connected = repos.find(r => r.status === 'connected');
-      if (connected && onOneOffBackup) {
-          onOneOffBackup(connected);
-      } else if (repos.length > 0) {
-          // If not connected but exists, try to connect first (user has to do it manually in list for now)
-          onChangeView(View.REPOSITORIES);
+      // Find the first available connected repo, OR fallback to the first repo in list
+      const targetRepo = repos.find(r => r.status === 'connected') || repos[0];
+      
+      if (targetRepo && onOneOffBackup) {
+          onOneOffBackup(targetRepo);
       } else {
+          // Only redirect if absolutely no repos exist
           onChangeView(View.REPOSITORIES);
       }
   };

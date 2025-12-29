@@ -735,7 +735,7 @@ const App: React.FC = () => {
         {backupRepo && (
           <CreateBackupModal 
               initialRepo={backupRepo}
-              repos={repos.filter(r => r.status === 'connected')}
+              repos={repos} // CHANGED: Pass all repos, allowing user to select disconnected ones
               isOpen={!!backupRepo}
               onClose={() => setBackupRepo(null)}
               onLog={(title, logs) => {
