@@ -1,6 +1,4 @@
 
-
-
 // This service communicates with the Electron Main process
 
 import { formatBytes, formatDuration } from '../utils/formatters';
@@ -185,10 +183,6 @@ export const borgService = {
   testConnection: async (repoUrl: string, onLog: (text: string) => void, overrides?: { disableHostCheck?: boolean }) => {
       onLog("Testing connection (Borg Version Check)...\n");
       const args = ['--version'];
-      // If SSH, we must prefix ssh logic, but since borg handles it:
-      // We run "borg serve --version" remotely? No, 'borg init' does connection check implicitly.
-      // A safe non-destructive check is listing the repo, but that fails if not init.
-      // So we check if 'borg' is reachable on the remote.
       
       const parsed = parseBorgUrl(repoUrl);
       if (parsed.isSsh) {
@@ -208,6 +202,11 @@ export const borgService = {
           onLog(`Checking local path: ${parsed.path}`);
           return true; // Trivial for local
       }
+  },
+
+  deleteArchive: async (repoUrl: string, archiveName: string, onLog: (text: string) => void, overrides?: { repoId?: string, disableHostCheck?: boolean }) => {
+      const args = ['delete', '--progress', '--stats', `${repoUrl}::${archiveName}`];
+      return await borgService.runCommand(args, onLog, overrides);
   },
 
   /**

@@ -2,12 +2,13 @@
 import React, { useState } from 'react';
 import { Archive, Repository } from '../types';
 import Button from '../components/Button';
-import { Database, Clock, HardDrive, Search, Filter, Calendar, RefreshCw, Info, DownloadCloud, Loader2, ListChecks, FolderSearch, GitCompare } from 'lucide-react';
+import { Database, Clock, HardDrive, Search, Filter, Calendar, RefreshCw, Info, DownloadCloud, Loader2, ListChecks, FolderSearch, GitCompare, Trash2, AlertTriangle } from 'lucide-react';
 import ArchiveBrowserModal from '../components/ArchiveBrowserModal';
 import TerminalModal from '../components/TerminalModal';
 import DiffViewerModal from '../components/DiffViewerModal';
 import ExtractionSuccessModal from '../components/ExtractionSuccessModal';
 import { borgService } from '../services/borgService';
+import { toast } from '../utils/eventBus';
 
 interface ArchivesViewProps {
   archives: Archive[];
@@ -22,11 +23,15 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
   const [loadingInfo, setLoadingInfo] = useState<string | null>(null);
   const [isFetchingAll, setIsFetchingAll] = useState(false);
   
-  // Selection for Diff
+  // Selection for Diff / Delete
   const [selectedArchives, setSelectedArchives] = useState<string[]>([]);
   const [diffLogs, setDiffLogs] = useState<string[]>([]);
   const [isDiffOpen, setIsDiffOpen] = useState(false);
   const [isDiffing, setIsDiffing] = useState(false);
+  
+  // Delete State
+  const [itemsToDelete, setItemsToDelete] = useState<string[] | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   
   // Browser Modal State
   const [browserArchive, setBrowserArchive] = useState<Archive | null>(null);
@@ -78,13 +83,8 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
       if (selectedArchives.includes(archiveName)) {
           setSelectedArchives(prev => prev.filter(n => n !== archiveName));
       } else {
-          // Max 2
-          if (selectedArchives.length < 2) {
-             setSelectedArchives(prev => [...prev, archiveName]);
-          } else {
-             // Replace last
-             setSelectedArchives(prev => [prev[0], archiveName]);
-          }
+          // If shift key held? For now simple toggle
+          setSelectedArchives(prev => [...prev, archiveName]);
       }
   };
 
@@ -94,25 +94,14 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
       setIsDiffOpen(true);
       setDiffLogs([]);
 
-      // Usually borg diff old new
-      // Use the selection order or sort chronologically if we had date objects easily available
-      // Here we trust the user selects them, or we assume List is Chronological Descending
-      const sorted = archives.filter(a => selectedArchives.includes(a.name));
-      // Archives are normally sorted Newest -> Oldest in the UI list.
-      // Borg diff expects: borg diff OLD NEW
-      // So if sorted[0] is newer (top of list) and sorted[1] is older:
-      // we want diff(sorted[1], sorted[0])
-      
       let oldArchive = selectedArchives[0];
       let newArchive = selectedArchives[1];
 
-      // Simple heuristic: assuming the UI list is reverse chronological (standard for backups)
-      // If we find them in the list, the one with higher index is older.
+      // Simple heuristic: if we find them in the list, the one with higher index is older (assuming sorted descending).
       const idx0 = archives.findIndex(a => a.name === selectedArchives[0]);
       const idx1 = archives.findIndex(a => a.name === selectedArchives[1]);
       
       if (idx0 < idx1) {
-          // idx0 is smaller (appears earlier/higher), so it is NEWER.
           newArchive = selectedArchives[0];
           oldArchive = selectedArchives[1];
       } else {
@@ -133,6 +122,36 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
       } finally {
           setIsDiffing(false);
       }
+  };
+
+  const handleDeleteClick = (targets: string[]) => {
+      setItemsToDelete(targets);
+  };
+
+  const confirmDelete = async () => {
+      if (!itemsToDelete || !activeRepo) return;
+      
+      setIsDeleting(true);
+      
+      // Process one by one
+      for (const archiveName of itemsToDelete) {
+          try {
+              await borgService.deleteArchive(
+                  activeRepo.url,
+                  archiveName,
+                  (log) => console.log(log),
+                  { repoId: activeRepo.id, disableHostCheck: activeRepo.trustHost }
+              );
+              toast.success(`Deleted archive: ${archiveName}`);
+          } catch(e: any) {
+              toast.error(`Failed to delete ${archiveName}`);
+          }
+      }
+      
+      setIsDeleting(false);
+      setItemsToDelete(null);
+      setSelectedArchives([]); // Clear selection
+      onRefresh(); // Refresh list
   };
 
   return (
@@ -178,6 +197,38 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
           onClose={() => setSuccessPath(null)}
       />
 
+      {/* Delete Confirmation Modal */}
+      {itemsToDelete && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+              <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-gray-100 dark:border-slate-700 w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 p-6">
+                  <div className="flex flex-col items-center text-center">
+                      <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mb-4">
+                          <Trash2 className="w-6 h-6" />
+                      </div>
+                      <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">Delete Archives?</h3>
+                      <p className="text-slate-500 dark:text-slate-400 text-sm mb-4">
+                          Are you sure you want to permanently delete <b>{itemsToDelete.length}</b> archive(s)? This cannot be undone.
+                      </p>
+                      
+                      {itemsToDelete.length < 5 && (
+                          <ul className="text-xs text-slate-600 dark:text-slate-300 font-mono mb-6 bg-slate-50 dark:bg-slate-900 p-2 rounded w-full">
+                              {itemsToDelete.map(name => <li key={name} className="truncate">{name}</li>)}
+                          </ul>
+                      )}
+
+                      <div className="flex gap-3 w-full">
+                          <Button variant="secondary" onClick={() => setItemsToDelete(null)} disabled={isDeleting} className="flex-1">
+                              Cancel
+                          </Button>
+                          <Button onClick={confirmDelete} disabled={isDeleting} variant="danger" className="flex-1">
+                              {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Delete'}
+                          </Button>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
       <div className="flex justify-between items-end">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Archives</h1>
@@ -207,6 +258,18 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
                 >
                     <GitCompare className="w-4 h-4 mr-2" />
                     Diff ({selectedArchives.length})
+                </Button>
+            )}
+            
+            {/* Bulk Delete Button */}
+            {selectedArchives.length > 0 && (
+                <Button 
+                    variant="danger"
+                    onClick={() => handleDeleteClick(selectedArchives)}
+                    className="animate-in zoom-in"
+                >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete ({selectedArchives.length})
                 </Button>
             )}
             
@@ -305,9 +368,9 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
                                         className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600"
                                         onClick={() => setBrowserArchive(archive)}
                                         disabled={isFetchingAll}
+                                        title="Browse Files"
                                     >
-                                        <FolderSearch className="w-3 h-3 mr-2" />
-                                        Browse
+                                        <FolderSearch className="w-3 h-3" />
                                     </Button>
                                     <Button 
                                         size="sm" 
@@ -315,10 +378,20 @@ const ArchivesView: React.FC<ArchivesViewProps> = ({ archives, repos, onMount, o
                                         className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600"
                                         onClick={() => activeRepo && onMount(activeRepo, archive.name)}
                                         disabled={isFetchingAll}
+                                        title="Mount Archive"
                                     >
-                                        <HardDrive className="w-3 h-3 mr-2" />
-                                        Mount
+                                        <HardDrive className="w-3 h-3" />
                                     </Button>
+                                    
+                                    {/* Delete Single Item */}
+                                    <button 
+                                        onClick={() => handleDeleteClick([archive.name])}
+                                        className="p-2 bg-red-50 dark:bg-red-900/20 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded transition-colors"
+                                        title="Delete Archive"
+                                        disabled={isFetchingAll}
+                                    >
+                                        <Trash2 className="w-3 h-3" />
+                                    </button>
                                 </div>
                             </td>
                         </tr>

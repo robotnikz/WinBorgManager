@@ -6,20 +6,11 @@ import {
   HardDrive, 
   Server, 
   Activity, 
-  ArrowUpRight, 
-  Database, 
-  Clock, 
-  AlertTriangle,
   Zap,
   Loader2,
-  CheckCircle2,
-  XCircle,
-  XSquare,
-  Timer,
   Lock,
   Moon,
   Sun,
-  FileText,
   Play,
   Plus,
   RefreshCw,
@@ -283,11 +274,11 @@ const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* BOTTOM ROW: MAIN CONTENT SPLIT */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         
-        {/* LEFT COLUMN: REPO LIST (Takes 2/3) */}
-        <div className="lg:col-span-2">
-            <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden h-full">
+        {/* LEFT COLUMN: REPO LIST (Takes 2/3) - Now h-fit to shrink wrap content */}
+        <div className="lg:col-span-2 h-fit">
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-gray-50/50 dark:bg-slate-900/50">
                     <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
                         <Server className="w-4 h-4 text-slate-500" /> Repository Status
