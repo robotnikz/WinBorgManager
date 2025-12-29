@@ -47,7 +47,7 @@ function persistSecrets() {
 }
 
 // Helper: Get decrypted password for a repo
-function getDecrypted password(repoId) {
+function getDecryptedPassword(repoId) {
     if (!repoId || !secretsCache[repoId]) return null;
     try {
         if (safeStorage.isEncryptionAvailable()) {
