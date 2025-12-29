@@ -37,11 +37,26 @@ export interface Repository {
 export interface BackupJob {
     id: string;
     repoId: string;
-    name: string;          // Friendly name e.g. "Work Documents"
-    sourcePath: string;    // Local path
-    archivePrefix: string; // e.g. "work-docs" (Timestamp will be appended)
-    lastRun: string;       // ISO Date
+    name: string;          
+    sourcePath: string;    
+    archivePrefix: string; 
+    lastRun: string;       
     status: 'idle' | 'running' | 'success' | 'error';
+    
+    // Advanced Settings
+    compression: 'auto' | 'lz4' | 'zstd' | 'zlib' | 'none';
+    
+    // Retention (Pruning)
+    pruneEnabled: boolean;
+    keepDaily: number;
+    keepWeekly: number;
+    keepMonthly: number;
+    keepYearly: number;
+
+    // Schedule (Metadata for future background service)
+    scheduleEnabled: boolean;
+    scheduleType: 'daily' | 'hourly' | 'manual';
+    scheduleTime: string; // "14:00"
 }
 
 export interface Archive {

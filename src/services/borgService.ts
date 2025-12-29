@@ -209,7 +209,7 @@ export const borgService = {
 
   prune: async (
       repoUrl: string,
-      rules: { daily?: number, weekly?: number, monthly?: number, keepWithin?: string },
+      rules: { daily?: number, weekly?: number, monthly?: number, yearly?: number, keepWithin?: string },
       onLog: (text: string) => void,
       overrides?: { repoId?: string, disableHostCheck?: boolean }
   ): Promise<boolean> => {
@@ -218,6 +218,7 @@ export const borgService = {
       if (rules.daily) args.push('--keep-daily', rules.daily.toString());
       if (rules.weekly) args.push('--keep-weekly', rules.weekly.toString());
       if (rules.monthly) args.push('--keep-monthly', rules.monthly.toString());
+      if (rules.yearly) args.push('--keep-yearly', rules.yearly.toString());
       return await borgService.runCommand(args, onLog, overrides);
   },
 

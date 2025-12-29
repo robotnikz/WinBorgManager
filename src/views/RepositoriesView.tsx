@@ -104,10 +104,8 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({
   };
 
   const handleSave = async () => {
-    // Basic Validation
     if (!repoForm.name || !repoForm.url) return;
     
-    // Check passphrase match if initializing
     if (addMode === 'init' && repoForm.encryption !== 'none') {
         if (repoForm.passphrase !== confirmPassphrase) {
             setInitError("Passphrases do not match.");
@@ -120,7 +118,6 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({
     }
 
     if (editingRepoId) {
-        // --- EDIT MODE ---
         onEditRepo(editingRepoId, {
             ...repoForm,
             passphrase: undefined 
@@ -131,20 +128,16 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({
         setIsModalOpen(false);
 
     } else {
-        // --- ADD NEW (CONNECT or INIT) ---
         const newId = Math.random().toString(36).substr(2, 9);
         
-        // 1. Save Passphrase First
         if (repoForm.passphrase) {
             await borgService.savePassphrase(newId, repoForm.passphrase);
         }
 
         if (addMode === 'connect') {
-            // Just add to list
             onAddRepo({ ...repoForm, id: newId } as any);
             setIsModalOpen(false);
         } else {
-            // --- INITIALIZE REPO ---
             setIsInitializing(true);
             setInitError(null);
             setInitLog("Starting initialization...\n");
@@ -159,11 +152,9 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({
             setIsInitializing(false);
 
             if (success) {
-                // Add to list if success
                 onAddRepo({ ...repoForm, id: newId } as any);
                 setIsModalOpen(false);
             } else {
-                // Clean up secret if failed
                 await borgService.deletePassphrase(newId);
                 setInitError("Initialization failed. Check logs below.");
             }
@@ -263,7 +254,7 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({
           </div>
       )}
 
-      {/* Add/Edit Modal */}
+      {/* Add/Edit Modal omitted for brevity, same as before */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[2px] p-4 animate-in fade-in duration-200">
            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-gray-100 dark:border-slate-700 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 ring-1 ring-black/5 flex flex-col max-h-[90vh]">
@@ -274,7 +265,6 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({
                </button>
              </div>
 
-             {/* TABS */}
              {!editingRepoId && (
                  <div className="flex border-b border-gray-200 dark:border-slate-700">
                     <button 
@@ -381,7 +371,6 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({
                    </div>
                </div>
                
-               {/* Confirm Password Field for Init Mode */}
                {addMode === 'init' && repoForm.encryption !== 'none' && (
                    <div>
                      <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Confirm Passphrase</label>
@@ -422,7 +411,6 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({
                  </div>
                </div>
                
-               {/* INIT FEEDBACK */}
                {initError && (
                    <div className="p-3 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-xs rounded-lg border border-red-200 dark:border-red-800">
                        <strong>Error:</strong> {initError}
@@ -472,7 +460,8 @@ const RepositoriesView: React.FC<RepositoriesViewProps> = ({
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* CHANGED FROM lg:grid-cols-3 to lg:grid-cols-2 to give cards more width */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {filteredRepos.map(repo => (
           <RepoCard 
             key={repo.id} 

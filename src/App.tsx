@@ -580,9 +580,26 @@ const App: React.FC = () => {
           );
 
           if (success) {
-              setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'success', lastRun: new Date().toISOString() } : j));
               addActivity('Backup Job Success', `Created archive: ${archiveName}`, 'success');
               toast.success(`Job '${job.name}' finished successfully!`);
+              
+              // --- AUTO PRUNE IF ENABLED ---
+              if (job.pruneEnabled) {
+                  addActivity('Auto Prune Started', `Pruning repo for job ${job.name}...`, 'info');
+                  const pruneSuccess = await borgService.prune(
+                      repo.url,
+                      { daily: job.keepDaily, weekly: job.keepWeekly, monthly: job.keepMonthly, yearly: job.keepYearly },
+                      logCollector,
+                      { repoId: repo.id, disableHostCheck: repo.trustHost }
+                  );
+                  if (pruneSuccess) {
+                      addActivity('Auto Prune Success', `Repository pruned according to retention policy.`, 'success');
+                  } else {
+                      addActivity('Auto Prune Failed', `Pruning step failed. Check logs.`, 'warning');
+                  }
+              }
+
+              setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'success', lastRun: new Date().toISOString() } : j));
               if (repo.status === 'connected') handleConnect(repo); // Refresh archive list
           } else {
               setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'error' } : j));

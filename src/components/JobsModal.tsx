@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Repository, BackupJob } from '../types';
 import Button from './Button';
-import { Folder, Play, Trash2, X, Plus, Clock, Briefcase, Loader2 } from 'lucide-react';
+import { Folder, Play, Trash2, X, Plus, Clock, Briefcase, Loader2, Settings, Calendar, ShieldAlert } from 'lucide-react';
 import { borgService } from '../services/borgService';
 
 interface JobsModalProps {
@@ -17,11 +17,25 @@ interface JobsModalProps {
 
 const JobsModal: React.FC<JobsModalProps> = ({ repo, jobs, isOpen, onClose, onAddJob, onDeleteJob, onRunJob }) => {
   const [view, setView] = useState<'list' | 'create'>('list');
+  const [activeTab, setActiveTab] = useState<'general' | 'schedule' | 'retention'>('general');
   
-  // Create Form State
+  // Job Form State
   const [jobName, setJobName] = useState('');
   const [sourcePath, setSourcePath] = useState('');
   const [archivePrefix, setArchivePrefix] = useState('');
+  const [compression, setCompression] = useState<BackupJob['compression']>('auto');
+  
+  // Prune State
+  const [pruneEnabled, setPruneEnabled] = useState(true);
+  const [keepDaily, setKeepDaily] = useState(7);
+  const [keepWeekly, setKeepWeekly] = useState(4);
+  const [keepMonthly, setKeepMonthly] = useState(6);
+  const [keepYearly, setKeepYearly] = useState(1);
+
+  // Schedule State
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduleType, setScheduleType] = useState<'daily' | 'hourly' | 'manual'>('daily');
+  const [scheduleTime, setScheduleTime] = useState('14:00');
 
   if (!isOpen) return null;
 
@@ -35,14 +49,37 @@ const JobsModal: React.FC<JobsModalProps> = ({ repo, jobs, isOpen, onClose, onAd
           sourcePath,
           archivePrefix,
           lastRun: 'Never',
-          status: 'idle'
+          status: 'idle',
+          compression,
+          pruneEnabled,
+          keepDaily,
+          keepWeekly,
+          keepMonthly,
+          keepYearly,
+          scheduleEnabled,
+          scheduleType,
+          scheduleTime
       };
       
       onAddJob(newJob);
+      resetForm();
       setView('list');
+  };
+
+  const resetForm = () => {
       setJobName('');
       setSourcePath('');
       setArchivePrefix('');
+      setCompression('auto');
+      setPruneEnabled(true);
+      setKeepDaily(7);
+      setKeepWeekly(4);
+      setKeepMonthly(6);
+      setKeepYearly(1);
+      setScheduleEnabled(false);
+      setScheduleType('daily');
+      setScheduleTime('14:00');
+      setActiveTab('general');
   };
 
   const handleSelectFolder = async () => {
@@ -56,8 +93,9 @@ const JobsModal: React.FC<JobsModalProps> = ({ repo, jobs, isOpen, onClose, onAd
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-gray-100 dark:border-slate-700 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-gray-100 dark:border-slate-700 w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
            
+           {/* HEADER */}
            <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-gray-50 dark:bg-slate-900/50 shrink-0">
                <div>
                    <h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -82,7 +120,7 @@ const JobsModal: React.FC<JobsModalProps> = ({ repo, jobs, isOpen, onClose, onAd
                    ) : (
                        <div className="space-y-3">
                            {repoJobs.map(job => (
-                               <div key={job.id} className="bg-white dark:bg-slate-700/30 border border-gray-200 dark:border-slate-700 rounded-lg p-4 flex items-center justify-between group hover:border-purple-200 dark:hover:border-purple-800 transition-colors">
+                               <div key={job.id} className="bg-white dark:bg-slate-700/30 border border-gray-200 dark:border-slate-700 rounded-lg p-4 flex items-center justify-between group hover:border-purple-200 dark:hover:border-purple-800 transition-colors shadow-sm">
                                    <div className="min-w-0 flex-1 mr-4">
                                        <div className="flex items-center gap-2 mb-1">
                                            <h4 className="font-semibold text-slate-800 dark:text-slate-200">{job.name}</h4>
@@ -91,8 +129,9 @@ const JobsModal: React.FC<JobsModalProps> = ({ repo, jobs, isOpen, onClose, onAd
                                                    <Loader2 className="w-3 h-3 animate-spin" /> Running
                                                </span>
                                            )}
-                                           {job.status === 'success' && <span className="w-2 h-2 rounded-full bg-green-500"></span>}
-                                           {job.status === 'error' && <span className="w-2 h-2 rounded-full bg-red-500"></span>}
+                                           {job.pruneEnabled && (
+                                               <span className="text-[10px] text-orange-600 bg-orange-50 dark:bg-orange-900/20 px-1.5 py-0.5 rounded border border-orange-100 dark:border-orange-800/50">Auto-Prune</span>
+                                           )}
                                        </div>
                                        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-mono mb-1">
                                            <Folder className="w-3 h-3" /> {job.sourcePath}
@@ -130,52 +169,198 @@ const JobsModal: React.FC<JobsModalProps> = ({ repo, jobs, isOpen, onClose, onAd
                    )}
                </div>
            ) : (
-               <div className="p-6 flex-1 overflow-y-auto space-y-5">
-                   <div>
-                       <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Job Name</label>
-                       <input 
-                           type="text" 
-                           className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-md text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-                           placeholder="e.g. My Documents"
-                           value={jobName}
-                           onChange={e => setJobName(e.target.value)}
-                       />
+               <>
+                   {/* TABS HEADER */}
+                   <div className="flex border-b border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                       <button onClick={() => setActiveTab('general')} className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'general' ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50/50 dark:bg-purple-900/20 dark:text-purple-400' : 'text-slate-500 hover:bg-gray-50 dark:hover:bg-slate-700'}`}>
+                           <Settings className="w-4 h-4" /> General
+                       </button>
+                       <button onClick={() => setActiveTab('schedule')} className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'schedule' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50 dark:bg-blue-900/20 dark:text-blue-400' : 'text-slate-500 hover:bg-gray-50 dark:hover:bg-slate-700'}`}>
+                           <Calendar className="w-4 h-4" /> Schedule
+                       </button>
+                       <button onClick={() => setActiveTab('retention')} className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'retention' ? 'text-orange-600 border-b-2 border-orange-600 bg-orange-50/50 dark:bg-orange-900/20 dark:text-orange-400' : 'text-slate-500 hover:bg-gray-50 dark:hover:bg-slate-700'}`}>
+                           <ShieldAlert className="w-4 h-4" /> Retention
+                       </button>
                    </div>
 
-                   <div>
-                       <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Source Folder</label>
-                       <div className="flex gap-2">
-                            <input 
-                                type="text" 
-                                readOnly
-                                className="flex-1 px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-md text-sm text-slate-600 dark:text-slate-300 cursor-not-allowed"
-                                value={sourcePath}
-                                placeholder="Select folder..."
-                            />
-                            <Button variant="secondary" onClick={handleSelectFolder} className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600">Browse</Button>
-                       </div>
-                   </div>
+                   <div className="p-6 flex-1 overflow-y-auto space-y-6">
+                       
+                       {/* --- GENERAL TAB --- */}
+                       {activeTab === 'general' && (
+                           <>
+                               <div>
+                                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Job Name</label>
+                                   <input 
+                                       type="text" 
+                                       className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-md text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                                       placeholder="e.g. My Documents"
+                                       value={jobName}
+                                       onChange={e => setJobName(e.target.value)}
+                                   />
+                               </div>
 
-                   <div>
-                       <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Archive Prefix</label>
-                       <input 
-                           type="text" 
-                           className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-md text-sm text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-                           placeholder="e.g. docs"
-                           value={archivePrefix}
-                           onChange={e => setArchivePrefix(e.target.value.replace(/[^a-zA-Z0-9-_]/g, ''))}
-                       />
-                       <p className="text-[10px] text-slate-400 mt-1">
-                           Archives will be named like: <code>{archivePrefix || 'prefix'}-YYYY-MM-DD-HHMM</code>
-                       </p>
+                               <div>
+                                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Source Folder</label>
+                                   <div className="flex gap-2">
+                                        <input 
+                                            type="text" 
+                                            readOnly
+                                            className="flex-1 px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-md text-sm text-slate-600 dark:text-slate-300 cursor-not-allowed"
+                                            value={sourcePath}
+                                            placeholder="Select folder..."
+                                        />
+                                        <Button variant="secondary" onClick={handleSelectFolder} className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600">Browse</Button>
+                                   </div>
+                               </div>
+
+                               <div>
+                                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Archive Prefix</label>
+                                   <input 
+                                       type="text" 
+                                       className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-md text-sm text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                                       placeholder="e.g. docs"
+                                       value={archivePrefix}
+                                       onChange={e => setArchivePrefix(e.target.value.replace(/[^a-zA-Z0-9-_]/g, ''))}
+                                   />
+                                   <p className="text-[10px] text-slate-400 mt-1">
+                                       Archives will be named like: <code>{archivePrefix || 'prefix'}-YYYY-MM-DD-HHMM</code>
+                                   </p>
+                               </div>
+
+                               <div>
+                                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Compression</label>
+                                   <select
+                                       className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-md text-sm text-slate-900 dark:text-white"
+                                       value={compression}
+                                       onChange={(e) => setCompression(e.target.value as any)}
+                                   >
+                                       <option value="auto">Auto (LZ4) - Recommended</option>
+                                       <option value="lz4">LZ4 (Very Fast)</option>
+                                       <option value="zstd">ZSTD (High Compression)</option>
+                                       <option value="zlib">ZLIB (Compatibility)</option>
+                                       <option value="none">None</option>
+                                   </select>
+                               </div>
+                           </>
+                       )}
+
+                       {/* --- SCHEDULE TAB --- */}
+                       {activeTab === 'schedule' && (
+                           <>
+                               <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg mb-4">
+                                   <div className="flex items-center justify-between">
+                                       <div>
+                                           <h4 className="text-sm font-bold text-blue-900 dark:text-blue-200">Enable Schedule</h4>
+                                           <p className="text-xs text-blue-800 dark:text-blue-300 mt-1">Run this job automatically when the app is open.</p>
+                                       </div>
+                                       <input 
+                                           type="checkbox" 
+                                           className="w-5 h-5 text-blue-600 rounded"
+                                           checked={scheduleEnabled}
+                                           onChange={(e) => setScheduleEnabled(e.target.checked)}
+                                       />
+                                   </div>
+                               </div>
+
+                               <div className={scheduleEnabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}>
+                                   <div className="grid grid-cols-2 gap-4">
+                                       <div>
+                                           <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Frequency</label>
+                                           <select
+                                               className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-md text-sm"
+                                               value={scheduleType}
+                                               onChange={(e) => setScheduleType(e.target.value as any)}
+                                           >
+                                               <option value="daily">Daily</option>
+                                               <option value="hourly">Hourly</option>
+                                           </select>
+                                       </div>
+                                       {scheduleType === 'daily' && (
+                                           <div>
+                                               <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Time</label>
+                                               <input 
+                                                   type="time" 
+                                                   className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-md text-sm"
+                                                   value={scheduleTime}
+                                                   onChange={(e) => setScheduleTime(e.target.value)}
+                                               />
+                                           </div>
+                                       )}
+                                   </div>
+                                   <p className="text-xs text-slate-400 mt-4 italic">
+                                       Note: Scheduling requires WinBorg to be running. If missed, it will run on next launch (implementation pending).
+                                   </p>
+                               </div>
+                           </>
+                       )}
+
+                       {/* --- RETENTION TAB --- */}
+                       {activeTab === 'retention' && (
+                           <>
+                               <div className="p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg mb-4">
+                                   <div className="flex items-center justify-between">
+                                       <div>
+                                           <h4 className="text-sm font-bold text-orange-900 dark:text-orange-200">Prune after Backup</h4>
+                                           <p className="text-xs text-orange-800 dark:text-orange-300 mt-1">Automatically delete old archives to save space.</p>
+                                       </div>
+                                       <input 
+                                           type="checkbox" 
+                                           className="w-5 h-5 text-orange-600 rounded"
+                                           checked={pruneEnabled}
+                                           onChange={(e) => setPruneEnabled(e.target.checked)}
+                                       />
+                                   </div>
+                               </div>
+
+                               <div className={`grid grid-cols-2 gap-4 ${pruneEnabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+                                   <div>
+                                       <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1">Keep Daily</label>
+                                       <input 
+                                           type="number" 
+                                           className="w-full border border-gray-300 dark:border-slate-600 rounded p-2 text-sm bg-white dark:bg-slate-900 dark:text-white"
+                                           value={keepDaily}
+                                           onChange={e => setKeepDaily(parseInt(e.target.value) || 0)}
+                                       />
+                                   </div>
+                                   <div>
+                                       <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1">Keep Weekly</label>
+                                       <input 
+                                           type="number" 
+                                           className="w-full border border-gray-300 dark:border-slate-600 rounded p-2 text-sm bg-white dark:bg-slate-900 dark:text-white"
+                                           value={keepWeekly}
+                                           onChange={e => setKeepWeekly(parseInt(e.target.value) || 0)}
+                                       />
+                                   </div>
+                                   <div>
+                                       <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1">Keep Monthly</label>
+                                       <input 
+                                           type="number" 
+                                           className="w-full border border-gray-300 dark:border-slate-600 rounded p-2 text-sm bg-white dark:bg-slate-900 dark:text-white"
+                                           value={keepMonthly}
+                                           onChange={e => setKeepMonthly(parseInt(e.target.value) || 0)}
+                                       />
+                                   </div>
+                                   <div>
+                                       <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1">Keep Yearly</label>
+                                       <input 
+                                           type="number" 
+                                           className="w-full border border-gray-300 dark:border-slate-600 rounded p-2 text-sm bg-white dark:bg-slate-900 dark:text-white"
+                                           value={keepYearly}
+                                           onChange={e => setKeepYearly(parseInt(e.target.value) || 0)}
+                                       />
+                                   </div>
+                               </div>
+                           </>
+                       )}
+
                    </div>
-               </div>
+               </>
            )}
 
            <div className="px-6 py-4 bg-gray-50 dark:bg-slate-900/50 border-t border-gray-100 dark:border-slate-700 flex justify-end gap-3 shrink-0">
                {view === 'create' ? (
                    <>
-                       <Button variant="secondary" onClick={() => setView('list')}>Cancel</Button>
+                       <Button variant="secondary" onClick={() => { setView('list'); resetForm(); }}>Cancel</Button>
                        <Button onClick={handleCreate} disabled={!jobName || !sourcePath || !archivePrefix}>Save Job</Button>
                    </>
                ) : (
