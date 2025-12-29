@@ -23,6 +23,9 @@
             border-radius: 20px;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
             text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
         button {
             background: #3b82f6;
@@ -33,19 +36,34 @@
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: background 0.2s, opacity 0.2s;
             margin-top: 20px;
         }
-        button:hover {
+        button:disabled {
+            background: #475569;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        button:hover:not(:disabled) {
             background: #2563eb;
         }
         p {
             color: #94a3b8;
             max-width: 400px;
             line-height: 1.5;
+            margin-top: 20px;
         }
         canvas {
-            border-radius: 20px; /* Visual preview radius */
+            border-radius: 20px;
+            background: transparent;
+            max-width: 256px; /* Display smaller but render full res */
+            max-height: 256px;
+            border: 2px solid #334155;
+        }
+        #status {
+            margin-top: 10px;
+            font-weight: bold;
+            color: #fbbf24;
         }
     </style>
 </head>
@@ -53,7 +71,7 @@
 
     <div class="canvas-container">
         <!-- SVG Source (Hidden) -->
-        <svg id="sourceSvg" xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" style="display:none;">
+        <svg id="sourceSvg" xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" style="position:absolute; top:-9999px; left:-9999px;">
             <defs>
                 <linearGradient id="bg_grad" x1="0%" y1="0%" x2="0%" y2="100%">
                     <stop offset="0%" stop-color="#1e293b" />
@@ -94,34 +112,59 @@
         </svg>
 
         <canvas id="iconCanvas" width="512" height="512"></canvas>
-        <br>
-        <button onclick="downloadIcon()">Download Icon (.png)</button>
+        <div id="status">Generating...</div>
+        <button id="downloadBtn" onclick="downloadIcon()" disabled>Download Icon (.png)</button>
     </div>
 
     <p>
-        <strong>Step 1:</strong> Click Download.<br>
-        <strong>Step 2:</strong> Save the file as <code>icon.png</code> inside the <code>public/</code> folder of your project.<br>
-        <strong>Step 3:</strong> Run <code>npm run electron</code> again to see it in the taskbar.
+        <strong>Anleitung:</strong><br>
+        1. Warte, bis das Bild oben erscheint und der Button blau wird.<br>
+        2. Klicke auf "Download Icon".<br>
+        3. Speichere die Datei als <code>icon.png</code> im Ordner <code>public/</code>.<br>
+        4. Starte die App neu.
     </p>
 
     <script>
-        const canvas = document.getElementById('iconCanvas');
-        const ctx = canvas.getContext('2d');
-        const svg = document.getElementById('sourceSvg');
+        window.onload = function() {
+            const canvas = document.getElementById('iconCanvas');
+            const ctx = canvas.getContext('2d');
+            const svg = document.getElementById('sourceSvg');
+            const btn = document.getElementById('downloadBtn');
+            const status = document.getElementById('status');
 
-        // Convert SVG to string
-        const xml = new XMLSerializer().serializeToString(svg);
-        const svg64 = btoa(xml);
-        const b64Start = 'data:image/svg+xml;base64,';
-        const image64 = b64Start + svg64;
+            // 1. Serialize SVG to String
+            const serializer = new XMLSerializer();
+            let source = serializer.serializeToString(svg);
 
-        const img = new Image();
-        img.onload = function() {
-            ctx.drawImage(img, 0, 0);
+            // 2. Create a Blob (More robust than Base64 btoa)
+            const blob = new Blob([source], {type: 'image/svg+xml;charset=utf-8'});
+            const url = URL.createObjectURL(blob);
+
+            // 3. Load Image
+            const img = new Image();
+            
+            img.onload = function() {
+                // 4. Draw to Canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+                
+                // 5. Cleanup and Enable Button
+                URL.revokeObjectURL(url);
+                btn.disabled = false;
+                status.innerText = "Ready!";
+                status.style.color = "#4ade80"; // Green
+            };
+
+            img.onerror = function() {
+                status.innerText = "Error generating image";
+                status.style.color = "#ef4444";
+            };
+
+            img.src = url;
         };
-        img.src = image64;
 
         function downloadIcon() {
+            const canvas = document.getElementById('iconCanvas');
             const link = document.createElement('a');
             link.download = 'icon.png';
             link.href = canvas.toDataURL('image/png');
