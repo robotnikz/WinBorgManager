@@ -1,149 +1,111 @@
+
 # WinBorg Manager
 
-![WinBorg Manager Dashboard](/images/dashboard.png)
+![WinBorg Manager Dashboard](/public/icon.png)
 
-**A modern, Windows 11-styled GUI for BorgBackup.**
+**The modern, Windows 11-styled GUI for BorgBackup.**
 
-WinBorg Manager bridges the gap between the powerful deduplicating backup tool **BorgBackup** and the **Windows** desktop experience. It leverages the **Windows Subsystem for Linux (WSL)** to run Borg natively while providing a seamless, beautiful user interface to manage repositories, create archives, and—most importantly—mount backups directly into Windows Explorer.
+WinBorg Manager bridges the gap between the powerful deduplicating backup tool **BorgBackup** and the **Windows** desktop experience. It leverages the **Windows Subsystem for Linux (WSL)** to run Borg natively while providing a seamless, beautiful user interface to manage repositories, schedule jobs, and mount backups directly into Windows Explorer.
 
-## 💡 Motivation
-
-I am fully aware that **Vorta** exists, and it is an excellent tool (Big kudos to the developers!).
-
-However, I wanted to build a **leaner, more modern alternative** specifically for my workflow on Windows. My main goal was to create a lightweight tool that focuses purely on **speed and accessibility**—allowing me to mount archives and browse my files/folders via Windows Explorer instantly, wrapped in a native Windows 11 interface.
+> **Status:** Public Beta (v0.1.0)
 
 ## 🚀 Features
 
-*   **Windows 11 Aesthetics:** Clean UI with Mica effects and native look & feel.
-*   **WSL Integration:** Runs Borg in a native Linux environment for maximum stability and speed.
-*   **Repository Management:** Add, edit, and monitor local or remote (SSH/Hetzner/NAS) repositories.
-*   **Visual Monitoring:** See storage efficiency, deduplication savings, and compression stats instantly.
-*   **Integrity Checks:** Run and monitor `borg check` operations with ETA calculation.
-*   **Lock Management:** Automatically detects stalled lock files and offers a UI to break locks.
-*   **One-Click Mount:** Mount archives to the file system and browse them seamlessly in Windows Explorer.
+### Core Functionality
+*   **WSL Integration:** Runs Borg in a native Linux environment (Ubuntu/Debian) for maximum stability, speed, and compatibility.
+*   **Repository Management:** Add, edit, and monitor local or remote (SSH/Hetzner/BorgBase/Rsync.net) repositories.
+*   **Encryption Support:** Full support for `repokey` and `keyfile` encryption modes with secure passphrase management.
+
+### Backup & Scheduling
+*   **Automated Scheduler:** Built-in scheduler to run backups **Hourly** or **Daily** automatically in the background.
+*   **Job Management:** Define multiple backup jobs (e.g., "Documents", "Projects") with specific source paths and retention policies.
+*   **Retention Policies (Pruning):** Automatically clean up old archives (keep daily, weekly, monthly, yearly).
+*   **Compression:** Support for `lz4`, `zstd`, and `zlib` compression algorithms.
+
+### Restoration & Analysis
+*   **One-Click Mount:** Mount archives to a drive letter (e.g., `Z:`) and browse files seamlessly in **Windows Explorer**.
+*   **Archive Browser:** Built-in file browser to find and extract specific files without mounting.
+*   **Diff Viewer:** Visually compare two archives to see exactly what files were added, removed, or modified.
+*   **Integrity Checks:** Run `borg check` operations with real-time progress bars and ETA calculation.
+
+### UX & System
+*   **Windows 11 Design:** Clean UI with Mica effects, dark mode support, and native look & feel.
+*   **System Tray:** Minimizes to tray to keep backups running quietly in the background.
+*   **Notifications:** Native Windows notifications for backup success/failure.
+*   **Lock Management:** Automatically detects stalled lock files (`lock.roster`) and offers a UI to break locks safely.
 
 ---
 
 ## 🛠️ Installation & Setup Guide
 
-This guide is designed for beginners. It assumes you are starting with a standard Windows 10/11 PC and have never used Linux or Borg before.
+### Prerequisites
 
-### Phase 1: Enable WSL (Windows Subsystem for Linux)
+1.  **WSL (Windows Subsystem for Linux):**
+    *   Open PowerShell as Administrator and run: `wsl --install`
+    *   Restart your PC.
+    *   Open "Ubuntu" from the Start Menu to finish the setup (create a username/password).
 
-WinBorg uses a lightweight Linux (Ubuntu) running in the background to handle the heavy technical work.
+2.  **BorgBackup (Inside WSL):**
+    *   Open your Ubuntu terminal and run:
+        ```bash
+        sudo apt update && sudo apt install borgbackup fuse3 libfuse2 python3-llfuse python3-pyfuse3 -y
+        ```
 
-1.  Click the **Start Button**, type `PowerShell`.
-2.  Right-click "Windows PowerShell" and select **Run as Administrator**.
-3.  Copy and paste the following command, then press **Enter**:
-    ```powershell
-    wsl --install
-    ```
-4.  **Restart your computer** when asked.
-5.  **Crucial Step:** After restarting, a terminal window should open automatically to install **Ubuntu**.
-    *   *If it doesn't open automatically:* Search for "Ubuntu" in the Start Menu and open it.
-6.  Wait for the installation to finish. You will be asked to create a **Unix Username** and **Password**.
-    *   *Tip:* When typing the password, nothing will appear on screen. This is normal. Just type it and press Enter.
+3.  **FUSE Configuration (For Mounting):**
+    *   To allow Windows Explorer to see mounted drives, run this in Ubuntu:
+        ```bash
+        echo "user_allow_other" | sudo tee -a /etc/fuse.conf
+        sudo chmod 666 /dev/fuse
+        ```
 
-### Phase 2: Install Borg Backup Software
+### Installation
 
-Now we install the backup engine inside the Linux system.
-
-1.  Open the **Ubuntu** app from your Start Menu.
-2.  Copy and paste this entire command line and press **Enter**:
-    ```bash
-    sudo apt update && sudo apt install borgbackup fuse3 libfuse2 python3-llfuse python3-pyfuse3 -y
-    ```
-3.  Enter the password you created in Phase 1 if prompted.
-
-### Phase 3: Setup SSH Keys (For Remote Backups)
-
-Most Borg repositories (like Hetzner StorageBox or rsync.net) require an SSH Key instead of a password.
-
-1.  In the **Ubuntu** terminal, verify if you already have a key or create a new one:
-    ```bash
-    ssh-keygen -t ed25519
-    ```
-    *   Press **Enter** 3 times (to accept default path and no passphrase for the key itself).
-2.  Display your new public key:
-    ```bash
-    cat ~/.ssh/id_ed25519.pub
-    ```
-3.  **Copy the output** (it starts with `ssh-ed25519 ...`).
-4.  **Paste this key** into the "Authorized Keys" settings of your backup provider (e.g., Hetzner Console -> StorageBox -> SSH Keys).
-
-### Phase 4: Install WinBorg Manager
-
-1.  Download the latest installer (`.exe`) from the [Releases Page](#).
+1.  Download the latest installer (`.exe`) from the [Releases Page](https://github.com/robotnikz/WinBorg/releases).
 2.  Run the installer.
-3.  **Note:** Since this app is not signed with a paid certificate, **Windows SmartScreen** might warn you upon installation. Click **"More Info" -> "Run Anyway"** to install.
-4.  Open **WinBorg Manager**.
+3.  *Note:* Since this is an open-source tool without a paid certificate, Windows SmartScreen may warn you. Click **"More Info" -> "Run Anyway"**.
 
 ---
 
-## 📖 User Guide
+## 📖 Quick Start
 
-### 1. Dashboard
-The landing page gives you a health check of your backup infrastructure.
-*   **Stats:** View total data protected, storage usage, and deduplication efficiency (how much space Borg saved you).
-*   **Repository Status:** Quickly see which repos are connected, offline, or locked.
-*   **Quick Actions:** Shortcuts to verify integrity or add new sources.
+### 1. Connect a Repository
+*   Go to the **Repositories** tab.
+*   Click **Add Repository**.
+*   Choose a template (Hetzner, BorgBase) or enter your SSH URL manually.
+    *   *Tip:* Check "Trust Host" if connecting to a new server to avoid SSH key errors.
 
-### 2. Repositories
-Manage your backup destinations here.
-*   **Adding a Repo:** Click "Add Repository".
-    *   **Name:** Give it a friendly name (e.g., "Hetzner Box").
-    *   **URL:** Enter the SSH URL (e.g., `ssh://u123@u123.your-storagebox.de:23/./backup`).
-    *   **Encryption:** Select your mode (Repokey/Keyfile).
-    *   **Trust Host:** Check this if connecting for the first time to avoid SSH errors.
-*   **Lock Status:** If a backup crashed previously, a repository might be "Locked". WinBorg detects `lock.roster` files and shows a **Locked** badge. You can click the **Unlock** button on the card to force-remove these locks.
-*   **Integrity Check:** Click "Verify Integrity" to run a consistency check. WinBorg displays a progress bar and an estimated time of arrival (ETA).
+### 2. Create a Backup Job
+*   On the Repository card, click the **Briefcase Icon** (Manage Jobs).
+*   Click **Create First Job**.
+*   **General:** Name your job (e.g., "Work Files") and select the Source Folder on your C: drive.
+*   **Schedule:** Enable "Schedule" and choose "Daily" at a specific time.
+*   **Retention:** Enable "Prune" to automatically delete old backups (e.g., Keep 7 Days, 4 Weeks).
+*   Click **Save Job**. The scheduler is now active!
 
-### 3. Archives
-Browse the history of your backups.
-*   **List:** Shows all snapshots in the currently connected repository.
-*   **Stats:** Click "Calc" on any archive to fetch its exact deduplicated size and duration.
-*   **Mounting:** Click the **Mount** button next to any archive to make it accessible in Windows.
-
-### 4. Mounts (Accessing your Files)
-This is where the magic happens. When you mount an archive:
-
-1.  Go to the **Mounts** tab.
-2.  You will see your active mount.
-3.  Click the **Open** button.
-4.  **Windows Explorer** will open directly into the backup.
-    *   *Technical Detail:* The path is located at `\\wsl.localhost\Ubuntu\mnt\wsl\winborg\<archive_name>`.
-5.  You can copy/paste files out of the backup just like a normal folder.
-6.  **Important:** When finished, click **Unmount** to release the connection.
-
-### 5. Activity
-A log of everything WinBorg does.
-*   Useful for troubleshooting connection errors or checking when the last verify operation finished.
-*   Shows technical command output if you hover over log entries.
+### 3. Restore Files
+*   **Option A (Mount):** Go to the **Archives** tab, click **Mount** on a snapshot. Go to the **Mounts** tab and click **Open**. Windows Explorer opens the folder.
+*   **Option B (Browser):** In the **Archives** tab, click the **Folder Icon** to browse files inside the app. Select files and click **Download Selection**.
 
 ---
 
 ## 🔧 Troubleshooting
 
 **"Connection Closed" or SSH Errors**
-*   Did you complete **Phase 3** of the installation guide? Ensure your public key (`id_ed25519.pub`) is uploaded to your backup server.
-*   In WinBorg, when adding a repo, try checking "Trust Unknown SSH Host".
+*   Ensure your SSH Public Key is added to your backup provider.
+*   You can generate a key in WSL via `ssh-keygen -t ed25519` and view it with `cat ~/.ssh/id_ed25519.pub`.
 
 **"Mount Failed: FUSE missing"**
-*   WinBorg tries to fix permissions automatically. If it fails, open Ubuntu and run:
-    ```bash
-    echo "user_allow_other" | sudo tee -a /etc/fuse.conf
-    sudo chmod 666 /dev/fuse
-    ```
+*   WinBorg attempts to fix permissions automatically. If it fails, ensure you ran the FUSE configuration commands in the "Prerequisites" section above.
 
 **App says "Repo Locked"**
 *   This happens if a previous backup was interrupted (power loss, crash).
-*   Go to the **Repositories** tab and click the **Unlock** button on the affected repository card.
+*   Go to the **Repositories** tab and click the **Unlock** button on the repository card.
 
 ---
 
 ## 💻 Development
 
-If you want to contribute to WinBorg:
+Contributions are welcome!
 
 ```bash
 # Clone the repo
@@ -152,10 +114,10 @@ git clone https://github.com/robotnikz/WinBorg.git
 # Install dependencies
 npm install
 
-# Run React Frontend + Electron Backend
+# Run React Frontend + Electron Backend in Dev Mode
 npm run electron
 ```
 
 ## 📄 License
 
-MIT License. See [LICENSE](LICENSE) file for details.
+MIT License.
