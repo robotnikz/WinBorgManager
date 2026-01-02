@@ -1,13 +1,18 @@
-
 # WinBorg Manager
 
 ![WinBorg Manager Dashboard](/public/dashboard.png)
 
 **The modern, Windows 11-styled GUI for BorgBackup.**
 
-WinBorg Manager bridges the gap between the powerful deduplicating backup tool **BorgBackup** and the **Windows** desktop experience. It leverages the **Windows Subsystem for Linux (WSL)** to run Borg natively while providing a seamless, beautiful user interface to manage repositories, schedule jobs, and mount backups directly into Windows Explorer.
+WinBorg Manager bridges the gap between the powerful deduplicating backup tool **BorgBackup** and the **Windows** desktop experience. It leverages the **Windows Subsystem for Linux (WSL)** to run Borg[...] 
 
 > **Status:** Public Beta (v0.1.0)
+
+## 💡 Motivation
+
+I wanted a simple, clean and modern alternative to Vorta — something that fits naturally into Windows 11 and lets me occasionally pull files from my Borg archives without having to use the command line or run a full Linux VM. WinBorg Manager was created because I wanted a GUI that brings BorgBackup’s power to Windows users while providing familiar workflows (mount as a drive, Explorer integration, native notifications). In short: a practical, user-friendly tool for people who work on Windows but still want the reliability and features of Borg.
+
+Note: Although this started as a private project, it may still be useful to others. Feel free to use, adapt, or learn from it.
 
 ## 🚀 Features
 
